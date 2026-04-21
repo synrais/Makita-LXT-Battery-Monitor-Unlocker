@@ -4,10 +4,10 @@ A 1-Wire battery interrogation tool for Makita 18 V / 36 V Li-Ion packs.
 Reads model, ROM ID, voltages, temperature, health, cycle count, lock state, and more.  
 Automatically detects insertion and removal. Performs charger-style auto-unlock on locked batteries.
 
-The included **`makita_monitor.py`** script or **`Makita_Monitor.exe`** are the recommended way to view output on a PC. It auto-detects the device, colourises the serial readout (lock state, health, errors, separators), triggers a scan automatically on connect, and lets you press **Enter** at any time or hotswap to rescan — no serial monitor configuration needed, just run the script.
+The included **`makita_monitor.py`** script, **`Makita_Monitor.exe`** (Windows), and **`Makita_Monitor.apk`** (Android) are the recommended ways to view output. The PC versions auto-detect the device over USB serial, colourise the readout (lock state, health, errors, separators), and trigger a scan automatically on connect. The Android APK does the same over USB OTG — plug the monitor into your phone or tablet via an OTG cable and it connects and scans automatically. No serial monitor configuration needed on any platform, just run the app.
 
 Runs on **Arduino Uno, Arduino Nano, ESP32-C3, and RP2040** — select your board in `platformio.ini`.
-
+Pre-built UF2 supplied for RP2040 Zero.
 ---
 
 ## Supported Boards
