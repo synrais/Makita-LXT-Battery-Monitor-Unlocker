@@ -1,25 +1,42 @@
-# Makita Battery Monitor — RP2040
+# Makita Battery Monitor
 
 A 1-Wire battery interrogation tool for Makita 18 V / 36 V Li-Ion packs.  
 Reads model, ROM ID, voltages, temperature, health, cycle count, lock state, and more.  
 Automatically detects insertion and removal. Performs charger-style auto-unlock on locked batteries.
 
+The included **`makita_monitor.py`** script is the recommended way to view output on a PC. It auto-detects the device, colourises the serial readout (lock state, health, errors, separators), triggers a scan automatically on connect, and lets you press **Enter** at any time to rescan — no serial monitor configuration needed, just run the script.
+
+Runs on **Arduino Uno, Arduino Nano, ESP32-C3, and RP2040** — select your board in `platformio.ini`.
+
+---
+
+## Supported Boards
+
+| Board                   | PlatformIO env              | Notes                                  |
+|-------------------------|-----------------------------|----------------------------------------|
+| Arduino Uno             | `uno`                       |                                        |
+| Arduino Nano            | `nano`                      |                                        |
+| ESP32-C3 SuperMini      | `esp32-c3-devkitm-1`        | Pull-ups to 3.3 V only — see below     |
+| Waveshare RP2040 Zero   | `waveshare_rp2040_zero`     | Recommended — UF2 available, see below |
+
 ---
 
 ## Hardware
 
-Target board: **Waveshare RP2040 Zero**
-
-| Signal      | GPIO |
-|-------------|------|
-| 1-Wire data | 6    |
-| Bus enable  | 8    |
-| NeoPixel    | 16   |
-
 The ENABLE pin switches a transistor or FET that powers the battery's BMS logic rail.  
 Toggling it LOW for ≥ 300 ms fully discharges the BMS capacitors and resets the battery's internal firmware state — this is what a real charger does on insertion.
 
-Pull-up resistors must be connected to **3.3 V**, not 5 V.
+**Pull-up resistors must be connected to 3.3 V on all boards.** Even on the Arduino Uno/Nano, the battery's 1-Wire bus must not be pulled to 5 V.
+
+### Pin assignments by board
+
+| Signal       | Uno / Nano | ESP32-C3 SuperMini | RP2040 Zero |
+|--------------|------------|--------------------|-------------|
+| 1-Wire data  | 6          | 1                  | 6           |
+| Bus enable   | 8          | 0                  | 8           |
+| NeoPixel     | —          | —                  | 16          |
+
+ESP32-C3 pin assignments can be overridden in `platformio.ini` via `ESP_EN_PIN` and `ESP_OW_PIN` build flags if your wiring differs from the SuperMini layout.
 
 ---
 
@@ -33,10 +50,19 @@ Pull-up resistors must be connected to **3.3 V**, not 5 V.
 
 ## Build and Flash
 
+### Option A — Pre-built UF2 (RP2040 Zero only, quickest)
+
+1. Download the latest `.uf2` file from the Releases page.
+2. Hold the BOOT button on the RP2040 Zero while plugging it in via USB — it mounts as a USB drive.
+3. Drag and drop the `.uf2` file onto the drive. It will reboot and start automatically.
+4. Open any serial terminal at **115200 baud** to see output.
+
+### Option B — Build from source (all boards)
+
 1. Clone or download this repository and open the folder in VS Code.
 2. PlatformIO will auto-detect the project via `platformio.ini`.
-3. Select the **`waveshare_rp2040_zero`** environment.
-4. Click **Build**, then **Upload** with the RP2040 Zero connected via USB.
+3. In the PlatformIO sidebar select the environment for your board (e.g. `waveshare_rp2040_zero`).
+4. Click **Build**, then **Upload** with your board connected via USB.
 5. Open the serial monitor at **115200 baud** to see output.
 
 ---
@@ -54,11 +80,11 @@ WAIT_BATTERY  ──►  SCAN_NOW  ──►  IDLE
      └────────────────┘◄─────────────┘
 ```
 
-| State         | What is happening                                                     |
-|---------------|-----------------------------------------------------------------------|
-| `WAIT_BATTERY`| Polling the bus every 800 ms for a presence pulse                    |
-| `SCAN_NOW`    | Battery detected (or `s` pressed) — full scan about to execute       |
-| `IDLE`        | Scan complete, polling every 800 ms to detect removal                 |
+| State          | What is happening                                                    |
+|----------------|----------------------------------------------------------------------|
+| `WAIT_BATTERY` | Polling the bus every 800 ms for a presence pulse                   |
+| `SCAN_NOW`     | Battery detected (or `s` pressed) — full scan about to execute      |
+| `IDLE`         | Scan complete, polling every 800 ms to detect removal               |
 
 ### Presence Polling
 
@@ -100,16 +126,16 @@ A battery is considered **locked** if any primary checksum fails, or if the fail
 #### 6 — Battery type detection
 Type is determined in priority order using the ROM ID and basic-info frame:
 
-| Priority | Type | Detection method                                              |
-|----------|------|---------------------------------------------------------------|
-| 1        | 5    | ROM ID byte 3 < 100 (F0513 chip variant)                     |
-| 2        | 6    | Basic-info byte 17 == 30 (BL36xx 10-cell pack)               |
-| 3        | 0    | `cmd_cc(0xDC 0x0B)` last byte == 0x06                        |
-| 4        | 2    | Enter test mode → `cmd_cc(0xDC 0x0A)` last byte == 0x06 → **exit test mode** |
-| 5        | 3    | `cmd_cc(0xD4 0x2C 0x00 0x02)` last byte == 0x06              |
-| 6        | 0    | Default fallback                                              |
+| Priority | Type | Detection method                                                                    |
+|----------|------|-------------------------------------------------------------------------------------|
+| 1        | 5    | ROM ID byte 3 < 100 (F0513 chip variant)                                           |
+| 2        | 6    | Basic-info byte 17 == 30 (BL36xx 10-cell pack)                                     |
+| 3        | 0    | `cmd_cc(0xDC 0x0B)` last byte == 0x06                                              |
+| 4        | 2    | Enter test mode → `cmd_cc(0xDC 0x0A)` last byte == 0x06 → **exit test mode**       |
+| 5        | 3    | `cmd_cc(0xD4 0x2C 0x00 0x02)` last byte == 0x06                                    |
+| 6        | 0    | Default fallback                                                                    |
 
-Test mode is always exited at step 4 of detection, even if the probe succeeded, so the battery cannot be left in test mode by this step.
+Test mode is always exited at priority 4, even if the probe succeeded, so the battery cannot be left in test mode by this step.
 
 #### 7 — Voltages
 Voltage reads are type-specific:
@@ -124,11 +150,12 @@ Voltage reads are type-specific:
 - **Type 6** — `cmd_cc(0xD2)` → single byte, formula: `(-40x + 9323) / 100`.
 
 #### 9 — Health, counters, charge level
-| Battery type | Health source                                          |
-|--------------|--------------------------------------------------------|
-| 5 / 6        | Calculated from cycle count, overload, overdischarge fields in basic info |
+
+| Battery type | Health source                                                                      |
+|--------------|------------------------------------------------------------------------------------|
+| 5 / 6        | Calculated from cycle count, overload, and overdischarge fields in basic info      |
 | 0 / 2 / 3    | Dedicated health command; also reads OD event count, overload counters, coulomb counter |
-| Other        | Damage rating field from basic-info nybble 46          |
+| Other        | Damage rating field from basic-info nybble 46                                      |
 
 #### 10 — Lock state and auto-unlock
 If the battery is unlocked the NeoPixel turns **blue** and the battery LEDs flash three times.
@@ -188,21 +215,21 @@ Battery type   : 18  (5 cell BL18xx)
 Capacity       : 5.0 Ah
 ```
 
-| Field          | Meaning                                                                 |
-|----------------|-------------------------------------------------------------------------|
-| `Model`        | ASCII model string read directly from the battery (7 chars max)        |
-| `ROM ID`       | 8-byte 1-Wire ROM identifier in hex — unique per cell                  |
-| `Detected type`| Internal protocol type (0, 2, 3, 5, or 6) — determines which commands are used |
-| `Battery type` | Raw type byte from basic info + decoded cell count and series           |
-| `Capacity`     | Rated capacity in Ah (raw value ÷ 10)                                  |
+| Field           | Meaning                                                                 |
+|-----------------|-------------------------------------------------------------------------|
+| `Model`         | ASCII model string read directly from the battery (7 chars max)        |
+| `ROM ID`        | 8-byte 1-Wire ROM identifier in hex — unique per cell                  |
+| `Detected type` | Internal protocol type (0, 2, 3, 5, or 6) — determines which commands are used |
+| `Battery type`  | Raw type byte from basic info + decoded cell count and series           |
+| `Capacity`      | Rated capacity in Ah (raw value ÷ 10)                                  |
 
 **Battery type raw ranges:**
 
-| Raw value | Decoded          |
-|-----------|------------------|
-| 0 – 12    | 4-cell BL14xx    |
-| 13 – 29   | 5-cell BL18xx    |
-| 30+       | 10-cell BL36xx   |
+| Raw value | Decoded        |
+|-----------|----------------|
+| 0 – 12    | 4-cell BL14xx  |
+| 13 – 29   | 5-cell BL18xx  |
+| 30+       | 10-cell BL36xx |
 
 ---
 
@@ -219,16 +246,16 @@ Aux CSum 44-47 : OK
 Aux CSum 48-61 : OK
 ```
 
-| Field            | Meaning                                                                |
-|------------------|------------------------------------------------------------------------|
-| `Lock status`    | `UNLOCKED` = battery will supply power to tools. `LOCKED` = BMS is blocking output |
-| `Cell failure`   | `YES` if nybble 44 bit 2 is set — indicates a cell-level fault detected by the BMS |
-| `Failure code`   | `0` OK · `1` Overloaded · `5` Warning · `15` Critical (BMS dead)      |
-| `Checksum 0-15`  | Primary checksum over basic-info nybbles 0–15. `FAIL` = data corrupt or battery in test mode |
-| `Checksum 16-31` | Primary checksum over nybbles 16–31                                    |
-| `Checksum 32-40` | Primary checksum over nybbles 32–40. All three must be `OK` for UNLOCKED |
-| `Aux CSum 44-47` | Informational only — does not affect lock state                        |
-| `Aux CSum 48-61` | Informational only — does not affect lock state                        |
+| Field             | Meaning                                                               |
+|-------------------|-----------------------------------------------------------------------|
+| `Lock status`     | `UNLOCKED` = battery will supply power to tools. `LOCKED` = BMS is blocking output |
+| `Cell failure`    | `YES` if nybble 44 bit 2 is set — indicates a cell-level fault detected by the BMS |
+| `Failure code`    | `0` OK · `1` Overloaded · `5` Warning · `15` Critical (BMS dead)     |
+| `Checksum 0-15`   | Primary checksum over basic-info nybbles 0–15. `FAIL` = data corrupt or battery left in test mode |
+| `Checksum 16-31`  | Primary checksum over nybbles 16–31                                   |
+| `Checksum 32-40`  | Primary checksum over nybbles 32–40. All three must be `OK` for UNLOCKED |
+| `Aux CSum 44-47`  | Informational only — does not affect lock state                       |
+| `Aux CSum 48-61`  | Informational only — does not affect lock state                       |
 
 > **Why checksums fail:** The most common cause is the battery being left in test mode. A correctly timed charger handshake and explicit test-mode exit resolves this. The auto-unlock sequence handles it automatically.
 
@@ -245,25 +272,25 @@ OD %           : 8.3 %
 Temperature    : 24.6 C
 ```
 
-| Field          | Meaning                                                                  |
-|----------------|--------------------------------------------------------------------------|
-| `Cycle count`  | Full charge/discharge cycles recorded by the BMS                        |
+| Field          | Meaning                                                                   |
+|----------------|---------------------------------------------------------------------------|
+| `Cycle count`  | Full charge/discharge cycles recorded by the BMS                         |
 | `Health`       | Degradation rating 0.00–4.00. Bar shows nearest integer out of 4 (`#` = good, `-` = lost) |
 | `OD events`    | Number of overdischarge events (types 0/2/3 only — read from dedicated counter) |
-| `Overload cnt` | Sum of all overload event counters (types 0/2/3 only)                   |
-| `OD %`         | `4 + 100 × OD_events / cycle_count` — relative overdischarge stress     |
-| `Overload %`   | Same formula for overload events                                         |
+| `Overload cnt` | Sum of all overload event counters (types 0/2/3 only)                    |
+| `OD %`         | `4 + 100 × OD_events / cycle_count` — relative overdischarge stress      |
+| `Overload %`   | Same formula for overload events                                          |
 | `Temperature`  | BMS thermistor reading in °C. Omitted if the battery type does not support it |
 
 **Health rating scale:**
 
-| Rating    | Bar    | Condition                         |
-|-----------|--------|-----------------------------------|
-| 3.5 – 4.0 | `####` | Excellent                         |
-| 2.5 – 3.5 | `###-` | Good                              |
-| 1.5 – 2.5 | `##--` | Fair — consider retiring soon     |
-| 0.5 – 1.5 | `#---` | Poor                              |
-| 0.0 – 0.5 | `----` | Dead / not recoverable            |
+| Rating    | Bar    | Condition                       |
+|-----------|--------|---------------------------------|
+| 3.5 – 4.0 | `####` | Excellent                       |
+| 2.5 – 3.5 | `###-` | Good                            |
+| 1.5 – 2.5 | `##--` | Fair — consider retiring soon   |
+| 0.5 – 1.5 | `#---` | Poor                            |
+| 0.0 – 0.5 | `----` | Dead / not recoverable          |
 
 For **types 5 and 6** there are no dedicated counter commands. OD % and Overload % are calculated directly from the raw fields in the basic-info frame using the formulas `(-5 × overdischarge + 160)` and `(5 × overload − 160)` respectively.
 
@@ -281,11 +308,11 @@ Cell  5        : 3.966 V
 Cell diff      : 0.005 V
 ```
 
-| Field         | Meaning                                                                   |
-|---------------|---------------------------------------------------------------------------|
-| `Pack voltage`| Total stack voltage in volts                                              |
-| `Cell N`      | Individual cell voltage. 4-cell packs show cells 1–4; 10-cell packs show 1–10 |
-| `Cell diff`   | Max cell voltage minus min cell voltage. Values above ~0.050 V indicate imbalance |
+| Field          | Meaning                                                                  |
+|----------------|--------------------------------------------------------------------------|
+| `Pack voltage` | Total stack voltage in volts                                             |
+| `Cell N`       | Individual cell voltage. 4-cell packs show cells 1–4; 10-cell packs show 1–10 |
+| `Cell diff`    | Max cell voltage minus min cell voltage. Values above ~0.050 V indicate imbalance |
 
 ---
 
@@ -333,6 +360,8 @@ Printed when the presence poll returns no response while in `IDLE` state.
 
 ## NeoPixel LED Guide
 
+> Applies to the RP2040 Zero only. Uno and Nano do not have an onboard NeoPixel.
+
 | Colour    | Meaning                                              |
 |-----------|------------------------------------------------------|
 | Off       | No battery / idle between polls                      |
@@ -353,6 +382,12 @@ Send `s` (or `S`) over the serial monitor at any time to trigger an immediate re
 
 This project uses a locally patched version of the OneWire library (`lib/OneWire/`).
 
-- Bit-level timing has been widened from the standard 1-Wire spec to match Makita's BMS timing requirements (reset pulse 750 µs, write-1 recovery 120 µs, write-0 low 100 µs).
-- The RP2040 fallback mode (API-based `digitalWrite`/`digitalRead`) has been replaced with direct **Single-cycle IO (SIO)** register access at `0xD0000000`, giving single-clock-cycle GPIO transitions and deterministic timing.
-- `delayMicroseconds` is mapped to `busy_wait_us` from the Pico SDK for accurate hardware-timer-backed delays within interrupt-disabled sections.
+Bit-level timing has been widened from the standard 1-Wire spec to match Makita's BMS timing requirements (reset pulse 750 µs, write-1 recovery 120 µs, write-0 low 100 µs). These values are the same across all supported boards.
+
+Each platform uses its own optimised GPIO path:
+
+| Platform | GPIO implementation                                                            |
+|----------|--------------------------------------------------------------------------------|
+| AVR (Uno / Nano) | Direct port register access — same as the upstream OneWire library    |
+| ESP32-C3 | Direct register access via the ESP32 GPIO hardware block                       |
+| RP2040   | Direct **Single-cycle IO (SIO)** register access at `0xD0000000`, giving single-clock-cycle GPIO transitions. `delayMicroseconds` is mapped to `busy_wait_us` from the Pico SDK for hardware-timer-backed delays within interrupt-disabled sections |
