@@ -1,4 +1,4 @@
-# Makita Battery Monitor
+# Auto Makita Battery Monitor/Unlocker
 
 A 1-Wire battery interrogation tool for Makita 18 V / 36 V Li-Ion packs.  
 Reads model, ROM ID, voltages, temperature, health, cycle count, lock state, and more.  
