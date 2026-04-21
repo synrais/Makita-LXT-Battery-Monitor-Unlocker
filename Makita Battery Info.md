@@ -1,3 +1,5 @@
+From https://github.com/rosvall/makita-lxt-protocol/tree/main
+
 ## Basic battery information command
 As far as I know, all batteries support this command, and all return data in the same annoying format.
 
