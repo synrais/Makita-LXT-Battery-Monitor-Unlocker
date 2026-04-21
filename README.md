@@ -14,8 +14,8 @@ Pre-built UF2 supplied for RP2040 Zero.
 
 | Board                   | PlatformIO env              | Notes                                  |
 |-------------------------|-----------------------------|----------------------------------------|
-| Arduino Uno             | `uno`                       |                                        |
-| Arduino Nano            | `nano`                      |                                        |
+| Arduino Uno             | `uno`                       | Pull-ups to 3.3 V only — see below     |
+| Arduino Nano            | `nano`                      | Pull-ups to 3.3 V only — see below     |
 | ESP32-C3 SuperMini      | `esp32-c3-devkitm-1`        | Pull-ups to 3.3 V only — see below     |
 | Waveshare RP2040 Zero   | `waveshare_rp2040_zero`     | Recommended — UF2 available, see below |
 
