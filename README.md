@@ -26,7 +26,7 @@ Pre-built UF2 supplied for RP2040 Zero.
 The ENABLE pin switches a transistor or FET that powers the battery's BMS logic rail.  
 Toggling it LOW for ≥ 300 ms fully discharges the BMS capacitors and resets the battery's internal firmware state — this is what a real charger does on insertion.
 
-**Pull-up resistors must be 4.7 kΩ and connected to 3.3 V on all boards.** This is the standard 1-Wire pull-up value — lower values overdrive the bus and higher values cause slow rise times that break timing. Even on the Arduino Uno/Nano, the battery's 1-Wire bus must not be pulled to 5 V.
+**Two 4.7 kΩ pull-up resistors are required** — one from the 1-Wire data pin to 3.3 V, and one from the bus enable pin to 3.3 V. Using the default pin assignments this means **pin 6 → 3.3 V** and **pin 8 → 3.3 V**. This is the standard 1-Wire pull-up value — lower values overdrive the bus and higher values cause slow rise times that break timing. Even on the Arduino Uno/Nano, both resistors must go to 3.3 V, not 5 V.
 
 ### Pin assignments by board
 
