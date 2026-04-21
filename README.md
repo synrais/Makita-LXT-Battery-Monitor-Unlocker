@@ -21,6 +21,32 @@ No configuration. No button presses. Just insert the battery and it runs. Remove
 
 ---
 
+## Status Light (RP2040 Zero)
+
+| Colour    | Meaning                                              |
+|-----------|------------------------------------------------------|
+| Off       | No battery / idle                                    |
+| 🟢 Green  | Battery detected — scan starting                     |
+| 🔵 Blue   | Scan complete, battery healthy and unlocked          |
+| 🟡 Yellow | Battery locked — unlock attempts in progress         |
+| 🔴 Red    | Unlock failed, or BMS dead (failure code 15)         |
+
+---
+
+## Apps & Software
+
+The included apps connect automatically over USB — no serial monitor setup needed.
+
+| Platform | File | Notes |
+|----------|------|-------|
+| Windows  | `Makita_Battery_Monitor.exe` | Auto-detects USB serial, colourised output |
+| Android  | `makita_battery_monitor_android_apk.zip` | Connect via USB OTG cable |
+| Any OS   | `makita_battery_monitor.py` | Python script, same features |
+
+All three trigger a scan automatically on connect and colourise the output (lock state, health, errors).
+
+---
+
 ## Reading the Output
 
 ### 🔋 Health Rating
@@ -86,32 +112,6 @@ Cell diff      : 0.005 V
 --------------------------------------------
 State of charge: 6 / 7
 ```
-
----
-
-## Status Light (RP2040 Zero)
-
-| Colour    | Meaning                                              |
-|-----------|------------------------------------------------------|
-| Off       | No battery / idle                                    |
-| 🟢 Green  | Battery detected — scan starting                     |
-| 🔵 Blue   | Scan complete, battery healthy and unlocked          |
-| 🟡 Yellow | Battery locked — unlock attempts in progress         |
-| 🔴 Red    | Unlock failed, or BMS dead (failure code 15)         |
-
----
-
-## Apps & Software
-
-The included apps connect automatically over USB — no serial monitor setup needed.
-
-| Platform | File | Notes |
-|----------|------|-------|
-| Windows  | `Makita_Battery_Monitor.exe` | Auto-detects USB serial, colourised output |
-| Android  | `makita_battery_monitor_android_apk.zip` | Connect via USB OTG cable |
-| Any OS   | `makita_battery_monitor.py` | Python script, same features |
-
-All three trigger a scan automatically on connect and colourise the output (lock state, health, errors).
 
 ---
 
