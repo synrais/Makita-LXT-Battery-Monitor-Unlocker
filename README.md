@@ -174,7 +174,6 @@ This is the standard 1-Wire pull-up value — lower values overdrive the bus and
 
 ESP32-C3 pin assignments can be overridden in `platformio.ini` via `ESP_EN_PIN` and `ESP_OW_PIN` build flags if your wiring differs from the SuperMini layout.
 
-Refer to `wiring.png` for more details.
 ![wiring diagram](Pictures/wiring.png)
 ---
 
