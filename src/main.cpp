@@ -66,12 +66,12 @@ void cmd_cc(const uint8_t *cmd, uint8_t cmd_len,
             uint8_t *rsp,       uint8_t rsp_len) {
     enable_bus();
     makita.reset();
-    delayMicroseconds(600);
+    delayMicroseconds(400);
     makita.write(0xCC, 0);
-    delayMicroseconds(200);
-    for (int i = 0; i < cmd_len; i++) { delayMicroseconds(150); makita.write(cmd[i], 0);    }
-    delayMicroseconds(300);
-    for (int i = 0; i < rsp_len; i++) { delayMicroseconds(150); rsp[i]     = makita.read(); }
+    delayMicroseconds(100);
+    for (int i = 0; i < cmd_len; i++) { delayMicroseconds(100); makita.write(cmd[i], 0);    }
+    delayMicroseconds(150);
+    for (int i = 0; i < rsp_len; i++) { delayMicroseconds(100); rsp[i]     = makita.read(); }
     disable_bus();
 }
 
@@ -79,13 +79,13 @@ void cmd_33(const uint8_t *cmd, uint8_t cmd_len,
             uint8_t *rsp,       uint8_t rsp_len) {
     enable_bus();
     makita.reset();
-    delayMicroseconds(600);
+    delayMicroseconds(400);
     makita.write(0x33, 0);
-    delayMicroseconds(200);
-    for (int i = 0; i < 8;       i++) { delayMicroseconds(150); rsp[i]     = makita.read();  }
-    for (int i = 0; i < cmd_len; i++) { delayMicroseconds(150); makita.write(cmd[i], 0);     }
-    delayMicroseconds(300);
-    for (int i = 0; i < rsp_len; i++) { delayMicroseconds(150); rsp[8 + i] = makita.read();  }
+    delayMicroseconds(100);
+    for (int i = 0; i < 8;       i++) { delayMicroseconds(100); rsp[i]     = makita.read();  }
+    for (int i = 0; i < cmd_len; i++) { delayMicroseconds(100); makita.write(cmd[i], 0);     }
+    delayMicroseconds(150);
+    for (int i = 0; i < rsp_len; i++) { delayMicroseconds(100); rsp[8 + i] = makita.read();  }
     disable_bus();
 }
 
@@ -93,13 +93,13 @@ void cmd_33(const uint8_t *cmd, uint8_t cmd_len,
 void cmd_33_raw(const uint8_t *cmd, uint8_t cmd_len,
                 uint8_t *rsp,       uint8_t rsp_len) {
     makita.reset();
-    delayMicroseconds(600);
+    delayMicroseconds(400);
     makita.write(0x33, 0);
-    delayMicroseconds(200);
-    for (int i = 0; i < 8;       i++) { delayMicroseconds(150); rsp[i]     = makita.read();  }
-    for (int i = 0; i < cmd_len; i++) { delayMicroseconds(150); makita.write(cmd[i], 0);     }
-    delayMicroseconds(300);
-    for (int i = 0; i < rsp_len; i++) { delayMicroseconds(150); rsp[8 + i] = makita.read();  }
+    delayMicroseconds(100);
+    for (int i = 0; i < 8;       i++) { delayMicroseconds(100); rsp[i]     = makita.read();  }
+    for (int i = 0; i < cmd_len; i++) { delayMicroseconds(100); makita.write(cmd[i], 0);     }
+    delayMicroseconds(150);
+    for (int i = 0; i < rsp_len; i++) { delayMicroseconds(100); rsp[8 + i] = makita.read();  }
 }
 
 // cmd_cc with bus already held HIGH — used for multi-step protocols (e.g. type 6 voltages)
@@ -107,12 +107,12 @@ void cmd_33_raw(const uint8_t *cmd, uint8_t cmd_len,
 void cmd_cc_raw(const uint8_t *cmd, uint8_t cmd_len,
                 uint8_t *rsp,       uint8_t rsp_len) {
     makita.reset();
-    delayMicroseconds(600);
+    delayMicroseconds(400);
     makita.write(0xCC, 0);
-    delayMicroseconds(200);
-    for (int i = 0; i < cmd_len; i++) { delayMicroseconds(150); makita.write(cmd[i], 0);    }
-    delayMicroseconds(300);
-    for (int i = 0; i < rsp_len; i++) { delayMicroseconds(150); rsp[i]     = makita.read(); }
+    delayMicroseconds(100);
+    for (int i = 0; i < cmd_len; i++) { delayMicroseconds(100); makita.write(cmd[i], 0);    }
+    delayMicroseconds(150);
+    for (int i = 0; i < rsp_len; i++) { delayMicroseconds(100); rsp[i]     = makita.read(); }
 }
 
 // ─────────────────────────────────────────────
@@ -584,7 +584,7 @@ void read_voltages_type6(float *v_pack, float *cells, int cell_count) {
     {
         uint8_t cmd[] = { 0x10, 0x21 };
         cmd_cc_raw(cmd, sizeof(cmd), dummy, 0);
-        delay(20);
+        delay(10);
     }
     {
         uint8_t cmd[] = { 0xD4 };
@@ -768,7 +768,7 @@ bool write_corrected_frame(uint8_t *data32) {
     {
         uint8_t rsp[32] = {0};
         cmd_cc(CHARGER_CMD, sizeof(CHARGER_CMD), rsp, 32);
-        delay(20);
+        delay(10);
     }
 
     // --- Step 4: write frame (33 [ROM ID read] 33 [32 bytes]) ---
