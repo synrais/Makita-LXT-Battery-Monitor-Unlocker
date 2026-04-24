@@ -142,8 +142,8 @@ Send `s` (or `S`) over the serial monitor at any time to trigger a fresh scan of
 
 | Board                   | PlatformIO env              | Notes                                  |
 |-------------------------|-----------------------------|----------------------------------------|
-| Arduino Uno             | `uno`                       | Pull-ups to 3.3 V only — see below     |
-| Arduino Nano            | `nano`                      | Pull-ups to 3.3 V only — see below     |
+| Arduino Uno             | `uno`                       | Pull-ups to 5 V — see below            |
+| Arduino Nano            | `nano`                      | Pull-ups to 5 V — see below            |
 | ESP32-C3 SuperMini      | `esp32-c3-devkitm-1`        | Pull-ups to 3.3 V only — see below     |
 | Waveshare RP2040 Zero   | `waveshare_rp2040_zero`     | Recommended — UF2 available            |
 
@@ -151,12 +151,18 @@ Send `s` (or `S`) over the serial monitor at any time to trigger a fresh scan of
 
 ## Hardware
 
-**Two 4.7 kΩ pull-up resistors are required** — one from the 1-Wire data pin to 3.3 V, and one from the bus enable pin to 3.3 V. Using the default pin assignments this means **pin 6 → 4.7 kΩ → 3.3 V** and **pin 8 → 4.7 kΩ → 3.3 V**. This is the standard 1-Wire pull-up value — lower values overdrive the bus and higher values cause slow rise times that break timing. Even on the Arduino Uno/Nano, both resistors must go to 3.3 V, not 5 V.
+**Two 4.7 kΩ pull-up resistors are required** — one from the 1-Wire data pin to supply voltage, and one from the bus enable pin to supply voltage. Using the default pin assignments this means **pin 6 → 4.7 kΩ → VCC** and **pin 8 → 4.7 kΩ → VCC**.
 
-** **Optional** ** — A 1 kΩ load resistor may required across the battery's main power terminals (B+ to B−) as some batteries enter a deep sleep state and will not respond on the 1-Wire bus until they detect current draw on the power terminals — toggling ENABLE alone is not sufficient to wake them. A 1 kΩ resistor draws enough to reliably trigger the BMS wake-up while remaining cool enough for a standard ¼ W or ½ W resistor. Values above ~1.5 kΩ have been found insufficient to wake some batteries.
-Plugging into a Makita charger should also wake a battery from this state.
+This is the standard 1-Wire pull-up value — lower values overdrive the bus and higher values cause slow rise times that break timing.
 
-**Something to note**, a battery will accept charge from any DC powersource in any state (Deep-sleep/Error), loading the battery with a 1 kΩ resistor then grounding the enable pin for a moment should make any locked BMS wake up and output power without clearing errors if the battery is above 8v charge.
+**Pull-up voltage depends on your board:**
+
+- **Arduino Uno / Nano** — pull up to **5 V**. The ATmega328P runs at 5 V and its logic HIGH threshold (~3.0 V) leaves almost no margin when pulling up to 3.3 V, causing unreliable reads. The battery's BMS data pin can tolerate 5 V in practice.
+- **ESP32-C3 / RP2040 Zero** — pull up to **3.3 V only**. These are 3.3 V-native devices and 5 V on a GPIO will damage them.
+
+> **Optional** — A 1 kΩ load resistor may be required across the battery's main power terminals (B+ to B−), as some batteries enter a deep sleep state and will not respond on the 1-Wire bus until they detect current draw on the power terminals — toggling ENABLE alone is not sufficient to wake them. A 1 kΩ resistor draws enough current to reliably trigger BMS wake-up while remaining cool enough for a standard ¼ W or ½ W resistor. Values above ~1.5 kΩ have been found insufficient to wake some batteries. Plugging into a Makita charger will also wake a battery from this state.
+
+> **Note** — A battery will accept charge from any DC power source in any state (deep sleep or error). Loading the battery with a 1 kΩ resistor then briefly grounding the enable pin should make any locked BMS wake up and output power without clearing errors, provided the battery is above ~8 V.
 
 ### Pin Assignments
 
@@ -168,7 +174,7 @@ Plugging into a Makita charger should also wake a battery from this state.
 
 ESP32-C3 pin assignments can be overridden in `platformio.ini` via `ESP_EN_PIN` and `ESP_OW_PIN` build flags if your wiring differs from the SuperMini layout.
 
-Refer to `wiring.png` for more details
+Refer to `wiring.png` for more details.
 
 ---
 
@@ -196,5 +202,3 @@ Refer to `wiring.png` for more details
 3. In the PlatformIO sidebar select the environment for your board (e.g. `waveshare_rp2040_zero`).
 4. Click **Build**, then **Upload** with your board connected via USB.
 5. Open the serial monitor at **115200 baud** to see output.
-
----
