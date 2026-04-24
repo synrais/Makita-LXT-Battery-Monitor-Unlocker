@@ -751,7 +751,7 @@ bool write_corrected_frame(uint8_t *data32) {
     set_nybble(frame, 63, calc_checksum(frame, 48, 61));
 
     Serial.println("  Writing corrected frame...");
-    Serial.print("  Frame          : ");
+    Serial.print("  Frame: ");
     for (int i = 0; i < 32; i++) {
         if (frame[i] < 0x10) Serial.print("0");
         Serial.print(frame[i], HEX);
