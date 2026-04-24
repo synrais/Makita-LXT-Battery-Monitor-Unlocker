@@ -47,6 +47,12 @@ All three trigger a scan automatically on connect and colourise the output (lock
 
 ---
 
+## Example Readout
+
+![pc exe](Pictures/PC_exe.png)
+
+---
+
 ## Reading the Output
 
 ### 🔋 Health Rating
@@ -75,12 +81,6 @@ The `Cell diff` value is the spread between your highest and lowest cell voltage
 ### 🔌 State of Charge (0–7 scale)
 
 Available on most battery types. This is the BMS's own internal coarse estimate, not a precision fuel gauge — treat it as a rough indicator.
-
----
-
-## Example Readout
-
-![pc exe](Pictures/PC_exe.png)
 
 ---
 
