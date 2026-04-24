@@ -54,8 +54,8 @@ All three trigger a scan automatically on connect and colourise the output (lock
 | 0    | ✅       | ✅          | ✅     | ✅       | ✅           | ✅     |
 | 2    | ✅       | ✅          | ✅     | ✅       | ✅           | ✅     |
 | 3    | ✅       | ✅          | ✅     | ✅       | ✅           | ✅     |
-| 5    | ✅       | ✅          | ✅     | —        | —            | —      | F0513 based
-| 6    | ✅       | ✅          | ✅     | —        | —            | —      | 10 cell battery, likely BL36xx
+| 5    | ✅       | ✅          | ✅     | —        | —            | —      | F0513 based |
+| 6    | ✅       | ✅          | ✅     | —        | —            | —      | 10 cell battery, likely BL36xx |
 | Unknown / Old | ✅ | —        | ✅     | —        | —            | —      |
 
 Types 5 and 6 have their own dedicated voltage and temperature commands and are fully read-out, but have no documented test mode, unlock, or counter commands — so none are attempted. Sending undocumented commands to these types risks corrupting BMS state with no guaranteed recovery path.
