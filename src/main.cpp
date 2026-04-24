@@ -30,7 +30,7 @@ void led_purple() { led_set(80,  0, 80); }
 // ─────────────────────────────────────────────
 //  Bus enable / disable
 // ─────────────────────────────────────────────
-void enable_bus(uint16_t ms = 500) { digitalWrite(ENABLE_PIN, HIGH); delay(ms); }
+void enable_bus(uint16_t ms = 100) { digitalWrite(ENABLE_PIN, HIGH); delay(ms); }
 void disable_bus()                 { digitalWrite(ENABLE_PIN, LOW);             }
 
 // Quick non-destructive presence check.
@@ -47,7 +47,7 @@ bool battery_present() {
 
 // Power-cycle: drop bus, let BMS caps discharge, re-assert.
 // Replicates what happens when a battery is inserted into a real charger.
-void power_cycle_bus(uint16_t off_ms = 300, uint16_t on_ms = 600) {
+void power_cycle_bus(uint16_t off_ms = 150, uint16_t on_ms = 200) {
     disable_bus();
     delay(off_ms);
     enable_bus(on_ms);
@@ -210,20 +210,20 @@ static const uint8_t STORE_CMD[]    = { 0x55, 0xA5 };
 void enter_testmode() {
     uint8_t rsp[1] = {0};
     cmd_cc(TESTMODE_DATA, sizeof(TESTMODE_DATA), rsp, 1);
-    delay(50);
+    delay(20);
 }
 
 void exit_testmode() {
     uint8_t cmd[] = { 0xD9, 0xFF, 0xFF };
     uint8_t rsp[1] = {0};
     cmd_cc(cmd, sizeof(cmd), rsp, 1);
-    delay(50);
+    delay(20);
 }
 
 void reset_errors() {
     uint8_t rsp[8 + RESET_ERR_RSP_LEN] = {0};
     cmd_33(RESET_ERR_DATA, sizeof(RESET_ERR_DATA), rsp, RESET_ERR_RSP_LEN);
-    delay(100);
+    delay(50);
 }
 
 // Flash the battery's own LED indicators via 1-Wire.
@@ -237,7 +237,7 @@ void flash_leds(int times, int on_ms = 150, int off_ms = 100) {
 
     for (int i = 0; i < times; i++) {
         digitalWrite(ENABLE_PIN, HIGH);
-        delay(100);
+        delay(50);
         cmd_33_raw(TESTMODE_DATA, sizeof(TESTMODE_DATA), rsp,   TESTMODE_RSP_LEN);
         cmd_33_raw(LEDS_ON_DATA,  sizeof(LEDS_ON_DATA),  r_on,  LEDS_ON_RSP_LEN);
         delay(on_ms);
@@ -247,7 +247,7 @@ void flash_leds(int times, int on_ms = 150, int off_ms = 100) {
         delay(off_ms);
     }
     exit_testmode();
-    power_cycle_bus(200, 400);
+    power_cycle_bus(150, 200);
 }
 
 // ─────────────────────────────────────────────
@@ -584,7 +584,7 @@ void read_voltages_type6(float *v_pack, float *cells, int cell_count) {
     {
         uint8_t cmd[] = { 0x10, 0x21 };
         cmd_cc_raw(cmd, sizeof(cmd), dummy, 0);
-        delay(10);
+        delay(20);
     }
     {
         uint8_t cmd[] = { 0xD4 };
@@ -613,6 +613,14 @@ void print_report(const BatteryInfo &info, float v_pack, float *cells, const uin
         if (info.rom_id[i] < 0x10) Serial.print("0");
         Serial.print(info.rom_id[i], HEX);
         if (i < 7) Serial.print(" ");
+    }
+    Serial.println();
+
+    Serial.print("Frame          : ");
+    for (int i = 0; i < 32; i++) {
+        if (data32[i] < 0x10) Serial.print("0");
+        Serial.print(data32[i], HEX);
+        if (i < 31) Serial.print(" ");
     }
     Serial.println();
 
@@ -705,29 +713,19 @@ void print_report(const BatteryInfo &info, float v_pack, float *cells, const uin
         print_sep();
         Serial.print("State of charge: "); Serial.print(soc); Serial.println(" / 7");
     }
-
-    print_sep();
-    Serial.print("Frame          : ");
-    for (int i = 0; i < 32; i++) {
-        if (data32[i] < 0x10) Serial.print("0");
-        Serial.print(data32[i], HEX);
-        if (i < 31) Serial.print(" ");
-    }
-    Serial.println();
 }
 
 // ─────────────────────────────────────────────
 //  Write corrected frame
 //
-//  Called when the battery has come back unlocked after a DA 04 reset
-//  but one or more primary checksums are still bad. Takes the live
-//  data32 frame, recalculates the three primary checksum nybbles
-//  (41, 42, 43), also recalculates the two auxiliary checksum nybbles
-//  (62, 63), then writes the corrected frame back using the charger
-//  write sequence observed in the BTC04 / DC18RC:
+//  Called when primary checksums are corrupt and DA 04 has failed to
+//  self-repair them. Takes the live data32 frame, recalculates the three
+//  primary checksum nybbles (41, 42, 43) and the two auxiliary checksum
+//  nybbles (62, 63), then writes the corrected frame back using the
+//  charger write sequence observed in the BTC04 / DC18RC:
 //
 //    1. enter test mode        (cc d9 96 a5)
-//    2. charger-mode read      (cc f0 00)   — arms BMS for write
+//    2. charger-mode arm       (cc f0 00)   — arms BMS for write
 //    3. write frame            (33 [ROM ID] 33 [32 bytes])
 //    4. store / commit         (33 [ROM ID] 55 a5)
 //    5. exit test mode         (cc d9 ff ff)
@@ -784,21 +782,21 @@ bool write_corrected_frame(uint8_t *data32) {
 
         uint8_t rsp[8] = {0};   // only ROM ID bytes come back
         cmd_33(write_opcode_and_payload, sizeof(write_opcode_and_payload), rsp, 0);
-        delay(50);
+        delay(20);
     }
 
     // --- Step 5: store / commit (33 [ROM ID read] 55 a5) ---
     {
         uint8_t rsp[8] = {0};
         cmd_33(STORE_CMD, sizeof(STORE_CMD), rsp, 0);
-        delay(100);
+        delay(50);
     }
 
     // --- Step 6: exit test mode ---
     exit_testmode();
 
     // --- Step 7: power-cycle so BMS reinitialises from committed values ---
-    power_cycle_bus(300, 600);
+    power_cycle_bus(150, 200);
 
     // --- Step 8: verify ---
     uint8_t verify[32] = {0};
@@ -823,24 +821,24 @@ bool write_corrected_frame(uint8_t *data32) {
 }
 
 // ─────────────────────────────────────────────
-//  Charger-style unlock with retry
+//  Charger-style unlock
 //  Only valid for battery types 0, 2, and 3.
 //  Types 5, 6, and unknown do not have documented
 //  unlock commands — do not call for those types.
 //
-//  Sequence per attempt:
+//  Sequence:
 //    1. DA 04 reset — ask BMS to self-correct errors
 //    2. Re-read basic info and check lock state
 //    3a. If unlocked and checksums OK  → success
-//    3b. If unlocked but checksums bad → try write_corrected_frame()
-//    3c. If still locked               → retry up to MAX_UNLOCK_ATTEMPTS
+//    3b. If checksums corrupt          → try write_corrected_frame()
+//    3c. If still locked               → cannot recover
 // ─────────────────────────────────────────────
 bool attempt_unlock(BatteryInfo &info, uint8_t *data32) {
-    power_cycle_bus(300, 600);
+    power_cycle_bus(150, 200);
     enter_testmode();
     reset_errors();
     exit_testmode();
-    delay(300);
+    delay(50);
 
     if (!read_basic_info(data32)) {
         Serial.println("  No response after unlock attempt.");
@@ -895,7 +893,7 @@ bool run_scan() {
     // Defensive: exit any lingering test mode from a previous interrupted scan.
     // Harmless if the battery is not in test mode.
     exit_testmode();
-    delay(100);
+    delay(50);
 
     led_off();
     Serial.println("============================================");
@@ -1011,7 +1009,7 @@ bool run_scan() {
                 flash_leds(3);
                 led_blue();
             } else {
-                Serial.println("Could not unlock battery after all attempts.");
+                Serial.println("Could not unlock battery.");
                 led_red();
             }
         }
