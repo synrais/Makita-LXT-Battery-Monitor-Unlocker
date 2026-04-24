@@ -25,6 +25,7 @@ void led_green()  { led_set(0,  80,  0); }
 void led_yellow() { led_set(80, 60,  0); }
 void led_blue()   { led_set(0,   0, 80); }
 void led_red()    { led_set(80,  0,  0); }
+void led_purple() { led_set(80,  0, 80); }
 
 // ─────────────────────────────────────────────
 //  Bus enable / disable
@@ -144,6 +145,16 @@ uint8_t calc_checksum(const uint8_t *data, int start_n, int end_n) {
     return (uint8_t)(min(sum, (uint16_t)0xff) & 0x0f);
 }
 
+// Write a nybble value into the correct half-byte position in a data buffer.
+void set_nybble(uint8_t *data, int n, uint8_t val) {
+    val &= 0x0F;
+    if (n % 2 == 0) {
+        data[n / 2] = (data[n / 2] & 0xF0) | val;
+    } else {
+        data[n / 2] = (data[n / 2] & 0x0F) | (val << 4);
+    }
+}
+
 // ─────────────────────────────────────────────
 //  Battery state
 // ─────────────────────────────────────────────
@@ -184,6 +195,16 @@ static const uint8_t LEDS_OFF_DATA[]   = { 0xDA, 0x34 };
 static const uint8_t LEDS_OFF_RSP_LEN  = 0x09;
 static const uint8_t RESET_ERR_DATA[]  = { 0xDA, 0x04 };
 static const uint8_t RESET_ERR_RSP_LEN = 0x09;
+
+// Charger-mode command: cc f0 00
+// This is the form used by the BTC04 and DC18RC chargers when reading
+// basic info and as the prerequisite step before writing a corrected frame.
+// Per the spec: repeating this command changes BMS state and stops responses
+// until ENABLE is cycled — so never call it twice without a power cycle.
+static const uint8_t CHARGER_CMD[]  = { 0xF0, 0x00 };
+
+// Store command: sent via 0x33 ROM path to commit a written frame to BMS memory.
+static const uint8_t STORE_CMD[]    = { 0x55, 0xA5 };
 
 // Enter / exit test mode — shared by types 0, 2, 3.
 void enter_testmode() {
@@ -687,10 +708,116 @@ void print_report(const BatteryInfo &info, float v_pack, float *cells) {
 }
 
 // ─────────────────────────────────────────────
+//  Write corrected frame
+//
+//  Called when the battery has come back unlocked after a DA 04 reset
+//  but one or more primary checksums are still bad. Takes the live
+//  data32 frame, recalculates the three primary checksum nybbles
+//  (41, 42, 43), also recalculates the two auxiliary checksum nybbles
+//  (62, 63), then writes the corrected frame back using the charger
+//  write sequence observed in the BTC04 / DC18RC:
+//
+//    1. enter test mode        (cc d9 96 a5)
+//    2. charger-mode read      (cc f0 00)   — arms BMS for write
+//    3. write frame            (33 [ROM ID] 33 [32 bytes])
+//    4. store / commit         (33 [ROM ID] 55 a5)
+//    5. exit test mode         (cc d9 ff ff)
+//    6. power-cycle bus        — lets BMS commit and re-initialise
+//
+//  The frame written is the battery's own live data with only the
+//  checksum nybbles corrected — no other bytes are touched.
+//
+//  Returns true if a subsequent read-back shows all checksums passing.
+// ─────────────────────────────────────────────
+bool write_corrected_frame(uint8_t *data32) {
+    // --- Step 1: recalculate all five checksum nybbles in a working copy ---
+    uint8_t frame[32];
+    memcpy(frame, data32, 32);
+
+    set_nybble(frame, 41, calc_checksum(frame, 0,  15));
+    set_nybble(frame, 42, calc_checksum(frame, 16, 31));
+    set_nybble(frame, 43, calc_checksum(frame, 32, 40));
+    // Auxiliary checksums — not used for lock state but write them correctly
+    // so the frame is fully consistent.
+    set_nybble(frame, 62, calc_checksum(frame, 44, 47));
+    set_nybble(frame, 63, calc_checksum(frame, 48, 61));
+
+    Serial.println("  Writing corrected frame...");
+
+    // --- Step 2: enter test mode ---
+    enter_testmode();
+
+    // --- Step 3: charger-mode arm (cc f0 00) ---
+    // This is the form used by the BTC04/DC18RC before a write.
+    // Per the spec, repeating f0 00 without cycling ENABLE will lock
+    // the bus — so we issue it exactly once here.
+    {
+        uint8_t rsp[32] = {0};
+        cmd_cc(CHARGER_CMD, sizeof(CHARGER_CMD), rsp, 32);
+        delay(20);
+    }
+
+    // --- Step 4: write frame (33 [ROM ID read] 33 [32 bytes]) ---
+    // cmd_33 reads the 8-byte ROM ID then sends the write opcode (0x33)
+    // followed by the 32-byte payload. No response bytes are expected
+    // from a write transaction.
+    {
+        uint8_t write_opcode_and_payload[1 + 32];
+        write_opcode_and_payload[0] = 0x33;           // write opcode
+        memcpy(&write_opcode_and_payload[1], frame, 32);
+
+        uint8_t rsp[8] = {0};   // only ROM ID bytes come back
+        cmd_33(write_opcode_and_payload, sizeof(write_opcode_and_payload), rsp, 0);
+        delay(50);
+    }
+
+    // --- Step 5: store / commit (33 [ROM ID read] 55 a5) ---
+    {
+        uint8_t rsp[8] = {0};
+        cmd_33(STORE_CMD, sizeof(STORE_CMD), rsp, 0);
+        delay(100);
+    }
+
+    // --- Step 6: exit test mode ---
+    exit_testmode();
+
+    // --- Step 7: power-cycle so BMS reinitialises from committed values ---
+    power_cycle_bus(300, 600);
+
+    // --- Step 8: verify ---
+    uint8_t verify[32] = {0};
+    if (!read_basic_info(verify)) {
+        Serial.println("  Write verify: no response after power cycle.");
+        return false;
+    }
+
+    BatteryInfo check;
+    memset(&check, 0, sizeof(check));
+    parse_basic_info(verify, check);
+
+    Serial.print("  Write verify checksum 0-15  : "); Serial.println(check.checksums_ok[0] ? "OK" : "FAIL");
+    Serial.print("  Write verify checksum 16-31 : "); Serial.println(check.checksums_ok[1] ? "OK" : "FAIL");
+    Serial.print("  Write verify checksum 32-40 : "); Serial.println(check.checksums_ok[2] ? "OK" : "FAIL");
+
+    if (!check.locked) {
+        memcpy(data32, verify, 32);   // hand caller the fresh verified frame
+        return true;
+    }
+    return false;
+}
+
+// ─────────────────────────────────────────────
 //  Charger-style unlock with retry
 //  Only valid for battery types 0, 2, and 3.
 //  Types 5, 6, and unknown do not have documented
 //  unlock commands — do not call for those types.
+//
+//  Sequence per attempt:
+//    1. DA 04 reset — ask BMS to self-correct errors
+//    2. Re-read basic info and check lock state
+//    3a. If unlocked and checksums OK  → success
+//    3b. If unlocked but checksums bad → try write_corrected_frame()
+//    3c. If still locked               → retry up to MAX_UNLOCK_ATTEMPTS
 // ─────────────────────────────────────────────
 static const int MAX_UNLOCK_ATTEMPTS = 5;
 
@@ -718,10 +845,31 @@ bool attempt_unlock(BatteryInfo &info, uint8_t *data32) {
         Serial.print("  Checksum 32-40 : "); Serial.println(info.checksums_ok[2] ? "OK" : "FAIL");
 
         if (!info.locked) {
+            // Fully clean — done.
             Serial.println("  -> UNLOCKED.");
             return true;
         }
-        Serial.println("  -> Still locked, retrying...");
+
+        // Battery is still reporting locked. Check whether checksums are
+        // corrupt. If so, DA 04 will never self-repair them — bail out of
+        // the retry loop immediately and attempt a single frame write.
+        bool any_checksum_bad = !info.checksums_ok[0] ||
+                                !info.checksums_ok[1] ||
+                                !info.checksums_ok[2];
+        if (any_checksum_bad) {
+            Serial.println("  -> Checksums corrupt. DA 04 cannot fix this.");
+            Serial.println("  -> Attempting frame write...");
+            led_purple();
+            if (write_corrected_frame(data32)) {
+                parse_basic_info(data32, info);
+                Serial.println("  -> Frame write succeeded. UNLOCKED.");
+                return true;
+            }
+            Serial.println("  -> Frame write failed.");
+            return false;
+        }
+
+        Serial.println("  -> Still locked (non-checksum reason), retrying...");
         delay(200 * attempt);
     }
     return false;
