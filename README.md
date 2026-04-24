@@ -145,7 +145,7 @@ Send `s` (or `S`) over the serial monitor at any time to trigger a fresh scan of
 | Arduino Uno             | `uno`                       | Pull-ups to 5 V — see below            |
 | Arduino Nano            | `nano`                      | Pull-ups to 5 V — see below            |
 | ESP32-C3 SuperMini      | `esp32-c3-devkitm-1`        | Pull-ups to 3.3 V only — see below     |
-| Waveshare RP2040 Zero   | `waveshare_rp2040_zero`     | Recommended — UF2 available            |
+| Waveshare RP2040 Zero   | `waveshare_rp2040_zero`     | Pull-ups to 3.3 V only — UF2 available |
 
 ---
 
