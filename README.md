@@ -16,6 +16,7 @@ Insert any Makita 18 V or 36 V Li-Ion pack and within seconds you get a full rep
 - 🔄 **Cycle count** — how many full charge/discharge cycles the pack has seen
 - 🔒 **Lock status** — LOCKED or UNLOCKED, with the specific failure code
 - 🛠️ **Auto-unlock** — performs a charger-style unlock sequence automatically on locked packs
+- 🔧 **Frame repair** — if a locked battery has corrupt checksums the BMS can't self-correct, reads the live data frame, recalculates the correct checksums, and writes it back — all other battery data untouched
 
 No configuration. No button presses. Just insert the battery and it runs. Remove it and the device waits for the next one.
 
