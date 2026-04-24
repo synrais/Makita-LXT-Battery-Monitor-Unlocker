@@ -1,4 +1,4 @@
-# 🔋 Makita Battery Monitor / Auto-Unlocker
+# 🔋 (Automatic) Makita Battery Monitor / Unlocker
 
 > Plug in a battery. Get instant readouts on voltage, health, temperature, cycle count, lock state, and more.  
 > Locked battery? — no phone or PC required. It unlocks itself automatically.
@@ -15,8 +15,10 @@ Insert any Makita 18 V or 36 V Li-Ion pack and within seconds you get a full rep
 - 🔋 **Health** — degradation score from 0–4 with a visual bar (`####`, `###-`, etc.)
 - 🔄 **Cycle count** — how many full charge/discharge cycles the pack has seen
 - 🔒 **Lock status** — LOCKED or UNLOCKED, with the specific failure code
+- 💡 **Status LED** — onboard NeoPixel shows device state at a glance
+- 🔦 **Battery LEDs** — flashes the pack's own indicators on detection and successful unlock
 - 🛠️ **Auto-unlock** — performs a charger-style unlock sequence automatically on locked packs
-- 🔧 **Frame repair** — if a locked battery has corrupt checksums the BMS can't self-correct, reads the live data frame, recalculates the correct checksums, and writes it back — all other battery data untouched
+- 🔧 **Frame repair** — recalculates and rewrites corrupt checksums without touching any other battery data
 
 No configuration. No button presses. Just insert the battery and it runs. Remove it and the device waits for the next one.
 
@@ -35,7 +37,16 @@ No configuration. No button presses. Just insert the battery and it runs. Remove
 
 ---
 
-## Apps & Software
+## Battery LED Indicators
+
+The battery's own LED indicators will flash during a scan — you can tell what's happening just by watching the pack itself, no serial monitor needed.
+
+| Flashes | When                              |
+|---------|-----------------------------------|
+| 1×      | Battery detected — scan starting  |
+| 3×      | Unlock or frame repair successful |
+
+---
 
 The included apps connect automatically over USB — no serial monitor setup needed.
 
