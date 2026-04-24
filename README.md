@@ -156,7 +156,7 @@ Toggling it LOW for ≥ 300 ms fully discharges the BMS capacitors and resets th
 
 **Two 4.7 kΩ pull-up resistors are required** — one from the 1-Wire data pin to 3.3 V, and one from the bus enable pin to 3.3 V. Using the default pin assignments this means **pin 6 → 4.7 kΩ → 3.3 V** and **pin 8 → 4.7 kΩ → 3.3 V**. This is the standard 1-Wire pull-up value — lower values overdrive the bus and higher values cause slow rise times that break timing. Even on the Arduino Uno/Nano, both resistors must go to 3.3 V, not 5 V.
 
-**Optional** A 1 kΩ load resistor may required across the battery's main power terminals (B+ to B−) as some batteries enter a deep sleep state and will not respond on the 1-Wire bus until they detect current draw on the power terminals — toggling ENABLE alone is not sufficient to wake them. A 1 kΩ resistor draws ~18 mA at 18 V (~0.3 W) which is enough to reliably trigger the BMS wake-up while remaining cool enough for a standard ¼ W or ½ W resistor. Values above ~1.5 kΩ have been found insufficient to wake some batteries.
+** **Optional** ** — A 1 kΩ load resistor may required across the battery's main power terminals (B+ to B−) as some batteries enter a deep sleep state and will not respond on the 1-Wire bus until they detect current draw on the power terminals — toggling ENABLE alone is not sufficient to wake them. A 1 kΩ resistor draws ~18 mA at 18 V (~0.3 W) which is enough to reliably trigger the BMS wake-up while remaining cool enough for a standard ¼ W or ½ W resistor. Values above ~1.5 kΩ have been found insufficient to wake some batteries.
 Plugging into a Makita charger should also wake a battery from this state.
 
 ### Pin Assignments
