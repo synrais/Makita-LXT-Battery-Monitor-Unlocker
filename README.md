@@ -168,7 +168,7 @@ Plugging into a Makita charger should also wake a battery from this state.
 
 ESP32-C3 pin assignments can be overridden in `platformio.ini` via `ESP_EN_PIN` and `ESP_OW_PIN` build flags if your wiring differs from the SuperMini layout.
 
-Refer to `Wiring.png` for more details
+Refer to `wiring.png` for more details
 
 ---
 
