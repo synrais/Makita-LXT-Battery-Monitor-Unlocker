@@ -604,7 +604,7 @@ void read_voltages_type6(float *v_pack, float *cells, int cell_count) {
 // ─────────────────────────────────────────────
 //  Print diagnostic report
 // ─────────────────────────────────────────────
-void print_report(const BatteryInfo &info, float v_pack, float *cells) {
+void print_report(const BatteryInfo &info, float v_pack, float *cells, const uint8_t *data32) {
 
     Serial.print("Model          : "); Serial.println(info.model);
 
@@ -705,6 +705,15 @@ void print_report(const BatteryInfo &info, float v_pack, float *cells) {
         print_sep();
         Serial.print("State of charge: "); Serial.print(soc); Serial.println(" / 7");
     }
+
+    print_sep();
+    Serial.print("Frame          : ");
+    for (int i = 0; i < 32; i++) {
+        if (data32[i] < 0x10) Serial.print("0");
+        Serial.print(data32[i], HEX);
+        if (i < 31) Serial.print(" ");
+    }
+    Serial.println();
 }
 
 // ─────────────────────────────────────────────
@@ -743,6 +752,13 @@ bool write_corrected_frame(uint8_t *data32) {
     set_nybble(frame, 63, calc_checksum(frame, 48, 61));
 
     Serial.println("  Writing corrected frame...");
+    Serial.print("  Frame          : ");
+    for (int i = 0; i < 32; i++) {
+        if (frame[i] < 0x10) Serial.print("0");
+        Serial.print(frame[i], HEX);
+        if (i < 31) Serial.print(" ");
+    }
+    Serial.println();
 
     // --- Step 2: enter test mode ---
     enter_testmode();
@@ -819,59 +835,47 @@ bool write_corrected_frame(uint8_t *data32) {
 //    3b. If unlocked but checksums bad → try write_corrected_frame()
 //    3c. If still locked               → retry up to MAX_UNLOCK_ATTEMPTS
 // ─────────────────────────────────────────────
-static const int MAX_UNLOCK_ATTEMPTS = 5;
-
 bool attempt_unlock(BatteryInfo &info, uint8_t *data32) {
-    for (int attempt = 1; attempt <= MAX_UNLOCK_ATTEMPTS; attempt++) {
-        Serial.print("  Unlock attempt ");
-        Serial.print(attempt);
-        Serial.print(" / ");
-        Serial.println(MAX_UNLOCK_ATTEMPTS);
+    power_cycle_bus(300, 600);
+    enter_testmode();
+    reset_errors();
+    exit_testmode();
+    delay(300);
 
-        power_cycle_bus(300, 600);
-        enter_testmode();
-        reset_errors();
-        exit_testmode();
-        delay(300);
+    if (!read_basic_info(data32)) {
+        Serial.println("  No response after unlock attempt.");
+        return false;
+    }
 
-        if (!read_basic_info(data32)) {
-            Serial.println("  No response after unlock attempt.");
-            continue;
-        }
+    parse_basic_info(data32, info);
+    Serial.print("  Checksum 0-15  : "); Serial.println(info.checksums_ok[0] ? "OK" : "FAIL");
+    Serial.print("  Checksum 16-31 : "); Serial.println(info.checksums_ok[1] ? "OK" : "FAIL");
+    Serial.print("  Checksum 32-40 : "); Serial.println(info.checksums_ok[2] ? "OK" : "FAIL");
 
-        parse_basic_info(data32, info);
-        Serial.print("  Checksum 0-15  : "); Serial.println(info.checksums_ok[0] ? "OK" : "FAIL");
-        Serial.print("  Checksum 16-31 : "); Serial.println(info.checksums_ok[1] ? "OK" : "FAIL");
-        Serial.print("  Checksum 32-40 : "); Serial.println(info.checksums_ok[2] ? "OK" : "FAIL");
+    if (!info.locked) {
+        Serial.println("  -> UNLOCKED.");
+        return true;
+    }
 
-        if (!info.locked) {
-            // Fully clean — done.
-            Serial.println("  -> UNLOCKED.");
+    // DA 04 did not clear the lock. If checksums are corrupt the BMS cannot
+    // self-repair them — attempt a single frame write.
+    bool any_checksum_bad = !info.checksums_ok[0] ||
+                            !info.checksums_ok[1] ||
+                            !info.checksums_ok[2];
+    if (any_checksum_bad) {
+        Serial.println("  -> Checksums corrupt. DA 04 cannot fix this.");
+        Serial.println("  -> Attempting frame write...");
+        led_purple();
+        if (write_corrected_frame(data32)) {
+            parse_basic_info(data32, info);
+            Serial.println("  -> Frame write succeeded. UNLOCKED.");
             return true;
         }
-
-        // Battery is still reporting locked. Check whether checksums are
-        // corrupt. If so, DA 04 will never self-repair them — bail out of
-        // the retry loop immediately and attempt a single frame write.
-        bool any_checksum_bad = !info.checksums_ok[0] ||
-                                !info.checksums_ok[1] ||
-                                !info.checksums_ok[2];
-        if (any_checksum_bad) {
-            Serial.println("  -> Checksums corrupt. DA 04 cannot fix this.");
-            Serial.println("  -> Attempting frame write...");
-            led_purple();
-            if (write_corrected_frame(data32)) {
-                parse_basic_info(data32, info);
-                Serial.println("  -> Frame write succeeded. UNLOCKED.");
-                return true;
-            }
-            Serial.println("  -> Frame write failed.");
-            return false;
-        }
-
-        Serial.println("  -> Still locked (non-checksum reason), retrying...");
-        delay(200 * attempt);
+        Serial.println("  -> Frame write failed.");
+        return false;
     }
+
+    Serial.println("  -> Still locked (non-checksum reason). Cannot recover.");
     return false;
 }
 
@@ -966,7 +970,7 @@ bool run_scan() {
     }
 
     print_sep();
-    print_report(info, v_pack, cells);
+    print_report(info, v_pack, cells, data32);
     print_sep();
 
     if (!info.locked) {
