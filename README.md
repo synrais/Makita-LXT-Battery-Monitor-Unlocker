@@ -31,11 +31,11 @@ No configuration. No button presses. Just insert the battery and it runs. Remove
 | Colour      | Meaning                                                        |
 |-------------|----------------------------------------------------------------|
 | ⚪ White    | No battery / idle                                              |
-| 🟢 Green    | Battery detected — scan starting                               |
-| 🔵 Blue     | Scan complete, battery healthy and unlocked                    |
+| 🔵 Blue     | Battery detected — scan starting                               |
 | 🟡 Yellow   | Battery locked — error reset attempts in progress              |
 | 🟣 Purple   | Checksums corrupt — writing corrected frame to BMS             |
-| 🔴 Red      | Unlock failed, or BMS dead (failure code 15)                   |
+| 🟢 Green    | Scan complete, battery healthy and unlocked                    |
+| 🔴 Red      | Unlock failed, or BMS dead                                     |
 
 ---
 
