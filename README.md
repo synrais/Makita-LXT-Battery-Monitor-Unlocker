@@ -201,3 +201,7 @@ ESP32-C3 pin assignments can be overridden in `platformio.ini` via `ESP_EN_PIN` 
 3. In the PlatformIO sidebar select the environment for your board (e.g. `waveshare_rp2040_zero`).
 4. Click **Build**, then **Upload** with your board connected via USB.
 5. Open the serial monitor at **115200 baud** to see output.
+
+
+Many thanks to the origianl project, check it out there is probably far more info and regular updates.
+https://github.com/mnh-jansson/open-battery-information/tree/main
