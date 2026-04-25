@@ -1174,9 +1174,9 @@ static void step_read_health(BatteryInfo &info, const uint8_t data32[BASIC_INFO_
 static void step_handle_lock(BatteryInfo &info, uint8_t data32[BASIC_INFO_LEN]) {
     if (!info.locked) {
         Serial.println(F("Battery UNLOCKED."));
-        led_blue();
+        led_green();
         if (type_supports_unlock(info.type)) flash_battery_leds(3);
-        led_blue();
+        led_green();
         return;
     }
 
@@ -1191,16 +1191,16 @@ static void step_handle_lock(BatteryInfo &info, uint8_t data32[BASIC_INFO_LEN]) 
         return;
     }
 
-    Serial.println(F("Attempting charger-style auto-unlock..."));
+    Serial.println(F("Attempting DA 04 unlock..."));
     led_yellow();
     flash_battery_leds(2);
 
     bool unlocked = attempt_unlock(info, data32);
     if (unlocked) {
         Serial.println(F("Battery successfully unlocked."));
-        led_blue();
+        led_green();
         flash_battery_leds(3);
-        led_blue();
+        led_green();
     } else {
         Serial.println(F("Could not unlock battery."));
         led_red();
@@ -1216,7 +1216,7 @@ static bool run_scan() {
     exit_testmode();
     power_cycle_bus();
 
-    led_green();
+    led_blue();
     Serial.println(F("============================================"));
     Serial.println(F("  Makita Monitor - Scanning..."));
     Serial.println(F("============================================"));
