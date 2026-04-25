@@ -66,7 +66,7 @@ void power_cycle_bus(uint16_t off_ms = 150, uint16_t on_ms = 200) {
 void cmd_cc(const uint8_t *cmd, uint8_t cmd_len,
             uint8_t *rsp,       uint8_t rsp_len) {
     enable_bus();
-    makita.reset();
+    if (!makita.reset()) { disable_bus(); return; }
     makita.write(0xCC, 0);
     delayMicroseconds(100);
     for (int i = 0; i < cmd_len; i++) { delayMicroseconds(100); makita.write(cmd[i], 0);    }
@@ -78,7 +78,7 @@ void cmd_cc(const uint8_t *cmd, uint8_t cmd_len,
 void cmd_33(const uint8_t *cmd, uint8_t cmd_len,
             uint8_t *rsp,       uint8_t rsp_len) {
     enable_bus();
-    makita.reset();
+    if (!makita.reset()) { disable_bus(); return; }
     makita.write(0x33, 0);
     delayMicroseconds(100);
     for (int i = 0; i < 8;       i++) { delayMicroseconds(100); rsp[i]     = makita.read();  }
@@ -91,7 +91,7 @@ void cmd_33(const uint8_t *cmd, uint8_t cmd_len,
 // cmd_33 with bus already held HIGH — used inside flash_leds only.
 void cmd_33_raw(const uint8_t *cmd, uint8_t cmd_len,
                 uint8_t *rsp,       uint8_t rsp_len) {
-    makita.reset();
+    if (!makita.reset()) return;
     makita.write(0x33, 0);
     delayMicroseconds(100);
     for (int i = 0; i < 8;       i++) { delayMicroseconds(100); rsp[i]     = makita.read();  }
@@ -104,7 +104,7 @@ void cmd_33_raw(const uint8_t *cmd, uint8_t cmd_len,
 // where ENABLE must not drop between sequential commands.
 void cmd_cc_raw(const uint8_t *cmd, uint8_t cmd_len,
                 uint8_t *rsp,       uint8_t rsp_len) {
-    makita.reset();
+    if (!makita.reset()) return;
     makita.write(0xCC, 0);
     delayMicroseconds(100);
     for (int i = 0; i < cmd_len; i++) { delayMicroseconds(100); makita.write(cmd[i], 0);    }
@@ -115,7 +115,7 @@ void cmd_cc_raw(const uint8_t *cmd, uint8_t cmd_len,
 // ─────────────────────────────────────────────
 //  Utility
 // ─────────────────────────────────────────────
-void print_sep() { Serial.println("--------------------------------------------"); }
+void print_sep() { Serial.println(F("--------------------------------------------")); }
 
 void print_float(const char *label, float val, const char *unit, int decimals = 3) {
     Serial.print(label);
@@ -271,15 +271,32 @@ void read_rom_id(uint8_t *rom_out) {
     memcpy(rom_out, rsp, 8);
 }
 
-bool read_basic_info(uint8_t *data32) {
+// F0513 (type 5) model: enter secondary command tree (cc 99), then read 2-byte
+// model code (cc 31). Format: BL{hi:02X}{lo:02X}.
+void read_model_type5(char *model_out) {
+    uint8_t enter[] = { 0x99 };
+    uint8_t dummy[1] = {0};
+    cmd_cc(enter, sizeof(enter), dummy, 0);
+
+    uint8_t cmd[] = { 0x31 };
+    uint8_t rsp[2] = {0};
+    cmd_cc(cmd, sizeof(cmd), rsp, 2);
+    snprintf(model_out, 8, "BL%02X%02X", rsp[1], rsp[0]);
+}
+
+// Returns: 1 = valid data, 0 = no response (all zeros), -1 = pre-type-0 HC08 (all 0xFF).
+// Pre-type-0 batteries (Freescale MC908JK3E BMS) return all-0xFF and have
+// NO cell monitoring or protection — they must not be charged on any charger.
+int read_basic_info(uint8_t *data32) {
     uint8_t cmd[] = { 0xAA, 0x00 };
     uint8_t rsp[32] = {0};
     cmd_cc(cmd, sizeof(cmd), rsp, 32);
-    uint8_t sum = 0;
-    for (int i = 0; i < 32; i++) sum |= rsp[i];
-    if (sum == 0x00) return false;
+    uint8_t or_val = 0, and_val = 0xFF;
+    for (int i = 0; i < 32; i++) { or_val |= rsp[i]; and_val &= rsp[i]; }
+    if (or_val  == 0x00) return 0;
+    if (and_val == 0xFF) return -1;
     memcpy(data32, rsp, 32);
-    return true;
+    return 1;
 }
 
 // ─────────────────────────────────────────────
@@ -603,69 +620,75 @@ void read_voltages_type6(float *v_pack, float *cells, int cell_count) {
 // ─────────────────────────────────────────────
 void print_report(const BatteryInfo &info, float v_pack, float *cells, const uint8_t *data32) {
 
-    Serial.print("Model          : "); Serial.println(info.model);
+    Serial.print(F("Model          : ")); Serial.println(info.model);
 
-    Serial.print("ROM ID         : ");
+    Serial.print(F("ROM ID         : "));
     for (int i = 0; i < 8; i++) {
-        if (info.rom_id[i] < 0x10) Serial.print("0");
+        if (info.rom_id[i] < 0x10) Serial.print(F("0"));
         Serial.print(info.rom_id[i], HEX);
-        if (i < 7) Serial.print(" ");
+        if (i < 7) Serial.print(F(" "));
     }
     Serial.println();
 
-    Serial.print("Detected type  : "); Serial.println(info.type);
+    // ROM ID bytes 0-2 encode manufacture date: year (20xx), month, day — raw decimal.
+    char date_buf[13];
+    snprintf(date_buf, sizeof(date_buf), "%02d/%02d/20%02d",
+             info.rom_id[2], info.rom_id[1], info.rom_id[0]);
+    Serial.print(F("Mfg date       : ")); Serial.println(date_buf);
 
-    Serial.print("Battery type   : ");
+    Serial.print(F("Detected type  : ")); Serial.println(info.type);
+
+    Serial.print(F("Battery type   : "));
     Serial.print(info.batt_type_raw);
-    Serial.print("  (");
-    if      (info.batt_type_raw < 13) Serial.print("4 cell BL14xx");
-    else if (info.batt_type_raw < 30) Serial.print("5 cell BL18xx");
-    else                              Serial.print("10 cell BL36xx");
-    Serial.println(")");
+    Serial.print(F("  ("));
+    if      (info.batt_type_raw < 13) Serial.print(F("4 cell BL14xx"));
+    else if (info.batt_type_raw < 30) Serial.print(F("5 cell BL18xx"));
+    else                              Serial.print(F("10 cell BL36xx"));
+    Serial.println(F(")"));
 
-    Serial.print("Capacity       : "); Serial.print(info.capacity_ah, 1); Serial.println(" Ah");
+    Serial.print(F("Capacity       : ")); Serial.print(info.capacity_ah, 1); Serial.println(F(" Ah"));
 
     print_sep();
-    Serial.print("Lock status    : "); Serial.println(info.locked ? "LOCKED" : "UNLOCKED");
-    Serial.print("Cell failure   : "); Serial.println(info.cell_failure ? "YES" : "No");
+    Serial.print(F("Lock status    : ")); Serial.println(info.locked ? "LOCKED" : "UNLOCKED");
+    Serial.print(F("Cell failure   : ")); Serial.println(info.cell_failure ? "YES" : "No");
 
-    Serial.print("Failure code   : ");
+    Serial.print(F("Failure code   : "));
     switch (info.failure_code) {
-        case 0:  Serial.println("0 - OK"); break;
-        case 1:  Serial.println("1 - Overloaded"); break;
-        case 5:  Serial.println("5 - Warning"); break;
-        case 15: Serial.println("15 - Critical (BMS dead)"); break;
+        case 0:  Serial.println(F("0 - OK")); break;
+        case 1:  Serial.println(F("1 - Overloaded")); break;
+        case 5:  Serial.println(F("5 - Warning")); break;
+        case 15: Serial.println(F("15 - Critical (BMS dead)")); break;
         default: Serial.println(info.failure_code); break;
     }
 
-    Serial.print("Checksum 0-15  : "); Serial.println(info.checksums_ok[0] ? "OK" : "FAIL");
-    Serial.print("Checksum 16-31 : "); Serial.println(info.checksums_ok[1] ? "OK" : "FAIL");
-    Serial.print("Checksum 32-40 : "); Serial.println(info.checksums_ok[2] ? "OK" : "FAIL");
-    Serial.print("Aux CSum 44-47 : "); Serial.println(info.aux_checksums_ok[0] ? "OK" : "FAIL");
-    Serial.print("Aux CSum 48-61 : "); Serial.println(info.aux_checksums_ok[1] ? "OK" : "FAIL");
+    Serial.print(F("Checksum 0-15  : ")); Serial.println(info.checksums_ok[0] ? "OK" : "FAIL");
+    Serial.print(F("Checksum 16-31 : ")); Serial.println(info.checksums_ok[1] ? "OK" : "FAIL");
+    Serial.print(F("Checksum 32-40 : ")); Serial.println(info.checksums_ok[2] ? "OK" : "FAIL");
+    Serial.print(F("Aux CSum 44-47 : ")); Serial.println(info.aux_checksums_ok[0] ? "OK" : "FAIL");
+    Serial.print(F("Aux CSum 48-61 : ")); Serial.println(info.aux_checksums_ok[1] ? "OK" : "FAIL");
 
     print_sep();
-    Serial.print("Cycle count    : "); Serial.println(info.cycle_count);
+    Serial.print(F("Cycle count    : ")); Serial.println(info.cycle_count);
 
-    Serial.print("Health         : ");
+    Serial.print(F("Health         : "));
     Serial.print(info.health_rating, 2);
-    Serial.print(" / 4  (");
+    Serial.print(F(" / 4  ("));
     int h = (int)round(info.health_rating);
     for (int i = 0; i < 4; i++) Serial.print(i < h ? "#" : "-");
-    Serial.println(")");
+    Serial.println(F(")"));
 
     // Types 0/2/3: event counters and derived percentages.
     if (info.type == 0 || info.type == 2 || info.type == 3) {
-        Serial.print("OD events      : "); Serial.println(info.od_count);
-        Serial.print("Overload cnt   : "); Serial.println(info.overload_count);
+        Serial.print(F("OD events      : ")); Serial.println(info.od_count);
+        Serial.print(F("Overload cnt   : ")); Serial.println(info.overload_count);
 
         if (info.od_count > 0 && info.cycle_count > 0) {
             float p = 4.0f + 100.0f * info.od_count / info.cycle_count;
-            Serial.print("OD %           : "); Serial.print(p, 1); Serial.println(" %");
+            Serial.print(F("OD %           : ")); Serial.print(p, 1); Serial.println(F(" %"));
         }
         if (info.overload_count > 0 && info.cycle_count > 0) {
             float p = 4.0f + 100.0f * info.overload_count / info.cycle_count;
-            Serial.print("Overload %     : "); Serial.print(p, 1); Serial.println(" %");
+            Serial.print(F("Overload %     : ")); Serial.print(p, 1); Serial.println(F(" %"));
         }
     }
 
@@ -673,12 +696,12 @@ void print_report(const BatteryInfo &info, float v_pack, float *cells, const uin
     if (info.type == 5 || info.type == 6) {
         float od_pct = -5.0f * info.overdischarge + 160.0f;
         float ol_pct =  5.0f * info.overload      - 160.0f;
-        Serial.print("OD %           : "); Serial.print(od_pct, 1); Serial.println(" %");
-        Serial.print("Overload %     : "); Serial.print(ol_pct, 1); Serial.println(" %");
+        Serial.print(F("OD %           : ")); Serial.print(od_pct, 1); Serial.println(F(" %"));
+        Serial.print(F("Overload %     : ")); Serial.print(ol_pct, 1); Serial.println(F(" %"));
     }
 
     if (info.temperature_c != INVALID_TEMP) {
-        Serial.print("Temperature    : "); Serial.print(info.temperature_c, 1); Serial.println(" C");
+        Serial.print(F("Temperature    : ")); Serial.print(info.temperature_c, 1); Serial.println(F(" C"));
     }
 
     print_sep();
@@ -700,15 +723,15 @@ void print_report(const BatteryInfo &info, float v_pack, float *cells, const uin
         float ratio = (float)info.charge_level / info.capacity_raw / 2880.0f;
         int soc = (ratio < 10.0f) ? 1 : min((int)(ratio / 10.0f), 7);
         print_sep();
-        Serial.print("State of charge: "); Serial.print(soc); Serial.println(" / 7");
+        Serial.print(F("State of charge: ")); Serial.print(soc); Serial.println(F(" / 7"));
     }
 
     print_sep();
-    Serial.print("Frame          : ");
+    Serial.print(F("Frame          : "));
     for (int i = 0; i < 32; i++) {
-        if (data32[i] < 0x10) Serial.print("0");
+        if (data32[i] < 0x10) Serial.print(F("0"));
         Serial.print(data32[i], HEX);
-        if (i < 31) Serial.print(" ");
+        if (i < 31) Serial.print(F(" "));
     }
     Serial.println();
 }
@@ -747,12 +770,12 @@ bool write_corrected_frame(uint8_t *data32) {
     set_nybble(frame, 62, calc_checksum(frame, 44, 47));
     set_nybble(frame, 63, calc_checksum(frame, 48, 61));
 
-    Serial.println("  Writing corrected frame...");
-    Serial.print("  Frame: ");
+    Serial.println(F("  Writing corrected frame..."));
+    Serial.print(F("  Frame: "));
     for (int i = 0; i < 32; i++) {
-        if (frame[i] < 0x10) Serial.print("0");
+        if (frame[i] < 0x10) Serial.print(F("0"));
         Serial.print(frame[i], HEX);
-        if (i < 31) Serial.print(" ");
+        if (i < 31) Serial.print(F(" "));
     }
     Serial.println();
 
@@ -798,8 +821,8 @@ bool write_corrected_frame(uint8_t *data32) {
 
     // --- Step 8: verify ---
     uint8_t verify[32] = {0};
-    if (!read_basic_info(verify)) {
-        Serial.println("  Write verify: no response after power cycle.");
+    if (read_basic_info(verify) != 1) {
+        Serial.println(F("  Write verify: no response after power cycle."));
         return false;
     }
 
@@ -807,9 +830,9 @@ bool write_corrected_frame(uint8_t *data32) {
     memset(&check, 0, sizeof(check));
     parse_basic_info(verify, check);
 
-    Serial.print("  Write verify checksum 0-15  : "); Serial.println(check.checksums_ok[0] ? "OK" : "FAIL");
-    Serial.print("  Write verify checksum 16-31 : "); Serial.println(check.checksums_ok[1] ? "OK" : "FAIL");
-    Serial.print("  Write verify checksum 32-40 : "); Serial.println(check.checksums_ok[2] ? "OK" : "FAIL");
+    Serial.print(F("  Write verify checksum 0-15  : ")); Serial.println(check.checksums_ok[0] ? "OK" : "FAIL");
+    Serial.print(F("  Write verify checksum 16-31 : ")); Serial.println(check.checksums_ok[1] ? "OK" : "FAIL");
+    Serial.print(F("  Write verify checksum 32-40 : ")); Serial.println(check.checksums_ok[2] ? "OK" : "FAIL");
 
     if (!check.locked) {
         memcpy(data32, verify, 32);   // hand caller the fresh verified frame
@@ -838,18 +861,18 @@ bool attempt_unlock(BatteryInfo &info, uint8_t *data32) {
     exit_testmode();
     delay(50);
 
-    if (!read_basic_info(data32)) {
-        Serial.println("  No response after unlock attempt.");
+    if (read_basic_info(data32) != 1) {
+        Serial.println(F("  No response after unlock attempt."));
         return false;
     }
 
     parse_basic_info(data32, info);
-    Serial.print("  Checksum 0-15  : "); Serial.println(info.checksums_ok[0] ? "OK" : "FAIL");
-    Serial.print("  Checksum 16-31 : "); Serial.println(info.checksums_ok[1] ? "OK" : "FAIL");
-    Serial.print("  Checksum 32-40 : "); Serial.println(info.checksums_ok[2] ? "OK" : "FAIL");
+    Serial.print(F("  Checksum 0-15  : ")); Serial.println(info.checksums_ok[0] ? "OK" : "FAIL");
+    Serial.print(F("  Checksum 16-31 : ")); Serial.println(info.checksums_ok[1] ? "OK" : "FAIL");
+    Serial.print(F("  Checksum 32-40 : ")); Serial.println(info.checksums_ok[2] ? "OK" : "FAIL");
 
     if (!info.locked) {
-        Serial.println("  -> UNLOCKED.");
+        Serial.println(F("  -> UNLOCKED."));
         return true;
     }
 
@@ -859,20 +882,20 @@ bool attempt_unlock(BatteryInfo &info, uint8_t *data32) {
                             !info.checksums_ok[1] ||
                             !info.checksums_ok[2];
     if (any_checksum_bad) {
-        Serial.println("  -> Checksums corrupt. DA 04 cannot fix this.");
-        Serial.println("  -> Attempting frame write...");
+        Serial.println(F("  -> Checksums corrupt. DA 04 cannot fix this."));
+        Serial.println(F("  -> Attempting frame write..."));
         led_purple();
         flash_leds(2);
         if (write_corrected_frame(data32)) {
             parse_basic_info(data32, info);
-            Serial.println("  -> Frame write succeeded. UNLOCKED.");
+            Serial.println(F("  -> Frame write succeeded. UNLOCKED."));
             return true;
         }
-        Serial.println("  -> Frame write failed.");
+        Serial.println(F("  -> Frame write failed."));
         return false;
     }
 
-    Serial.println("  -> Still locked (non-checksum reason). Cannot recover.");
+    Serial.println(F("  -> Still locked (non-checksum reason). Cannot recover."));
     return false;
 }
 
@@ -889,25 +912,27 @@ bool type_supports_unlock(int batt_type) {
 // ─────────────────────────────────────────────
 bool run_scan() {
     // Defensive: exit any lingering test mode from a previous interrupted scan.
-    // Harmless if the battery is not in test mode.
     exit_testmode();
     delay(50);
 
     led_off();
-    Serial.println("============================================");
-    Serial.println("  Makita Monitor - Scanning...");
-    Serial.println("============================================");
+    Serial.println(F("============================================"));
+    Serial.println(F("  Makita Monitor - Scanning..."));
+    Serial.println(F("============================================"));
 
     BatteryInfo info;
     memset(&info, 0, sizeof(info));
     info.temperature_c = INVALID_TEMP;
 
-    // Bounded retry (~3 s) to allow the BMS to finish waking up.
-    int model_tries = 0;
-    while (!read_model(info.model)) {
-        if (++model_tries > 15) {
-            Serial.println("ERROR: Battery not responding. Aborting scan.");
-            exit_testmode();   // defensive belt-and-braces
+    uint8_t data32[32] = {0};
+
+    // Bounded retry (~4.5 s): cc aa 00 is universally supported (all types incl. F0513).
+    int basic_tries = 0;
+    int basic_result;
+    while ((basic_result = read_basic_info(data32)) == 0) {
+        if (++basic_tries > 15) {
+            Serial.println(F("ERROR: Battery not responding. Aborting scan."));
+            exit_testmode();
             led_off();
             disable_bus();
             return false;
@@ -915,25 +940,38 @@ bool run_scan() {
         delay(200);
     }
 
-    print_sep();
-    Serial.print("Battery found  : "); Serial.println(info.model);
-    led_green();
-    flash_leds(1);
-
-    read_rom_id(info.rom_id);
-
-    uint8_t data32[32] = {0};
-    if (!read_basic_info(data32)) {
-        Serial.println("ERROR: No response from battery.");
-        exit_testmode();   // ensure clean state before giving up
+    if (basic_result == -1) {
+        // Pre-type-0 HC08 (Freescale MC908JK3E BMS): all-0xFF response.
+        // NO cell monitoring or protection — must NOT be charged on any charger.
+        print_sep();
+        Serial.println(F("WARNING: Pre-type-0 HC08 battery detected!"));
+        Serial.println(F("         Freescale MC908JK3E BMS -- no cell protection."));
+        Serial.println(F("         DO NOT charge on any charger."));
+        print_sep();
         led_red();
         disable_bus();
-        return false;
+        return true;
     }
-    parse_basic_info(data32, info);
 
-    // Pass data32 so detect_battery_type can check byte 17 for type 6.
+    parse_basic_info(data32, info);
+    read_rom_id(info.rom_id);
+
+    // Detect type before reading model — type 5 uses a different model command.
     info.type = detect_battery_type(info.rom_id, data32);
+
+    if (info.type == 5) {
+        read_model_type5(info.model);
+    } else {
+        read_model(info.model);
+    }
+
+    print_sep();
+    Serial.print(F("Battery found  : ")); Serial.println(info.model);
+    led_green();
+    // LED flash: only types 0/2/3 have documented LED commands.
+    if (info.type == 0 || info.type == 2 || info.type == 3) {
+        flash_leds(1);
+    }
 
     // ── Voltages — completely type-specific ───────────────
     // Array sized for 10 cells (type 6); unused entries stay 0.
@@ -966,55 +1004,66 @@ bool run_scan() {
         info.health_rating = calc_health_damage_rating(data32);
     }
 
+    // If the battery was removed during secondary reads, all those responses
+    // will be zero — don't print a report full of garbage.
+    if (!battery_present()) {
+        Serial.println(F("Battery removed during scan. Aborting."));
+        led_off();
+        disable_bus();
+        return false;
+    }
+
     print_sep();
     print_report(info, v_pack, cells, data32);
     print_sep();
 
     if (!info.locked) {
-        Serial.println("Battery UNLOCKED.");
+        Serial.println(F("Battery UNLOCKED."));
         led_blue();
-        flash_leds(3);
+        if (info.type == 0 || info.type == 2 || info.type == 3) {
+            flash_leds(3);
+        }
         led_blue();
     } else {
-        Serial.print("Battery LOCKED. Failure code: ");
+        Serial.print(F("Battery LOCKED. Failure code: "));
         Serial.println(info.failure_code);
 
         if (info.failure_code == 15) {
             // BMS is considered dead — nothing can recover this.
-            Serial.println("CRITICAL: BMS considered dead. Cannot recover.");
+            Serial.println(F("CRITICAL: BMS considered dead. Cannot recover."));
             led_red();
 
         } else if (!type_supports_unlock(info.type)) {
             // Types 5, 6, and unknown have no documented unlock commands.
             // Sending type 0/2/3 test-mode commands to these batteries could
             // corrupt state or cause undefined behaviour — do not attempt.
-            Serial.print("Unlock not supported for battery type ");
+            Serial.print(F("Unlock not supported for battery type "));
             Serial.print(info.type);
-            Serial.println(". No unlock attempted.");
+            Serial.println(F(". No unlock attempted."));
             led_red();
 
         } else {
             // Types 0, 2, 3: charger-style unlock is documented and safe.
-            Serial.println("Attempting charger-style auto-unlock...");
+            Serial.println(F("Attempting charger-style auto-unlock..."));
             led_yellow();
             flash_leds(2);
 
             bool unlocked = attempt_unlock(info, data32);
 
             if (unlocked) {
-                Serial.println("Battery successfully unlocked.");
+                Serial.println(F("Battery successfully unlocked."));
                 led_blue();
                 flash_leds(3);
                 led_blue();
             } else {
-                Serial.println("Could not unlock battery.");
+                Serial.println(F("Could not unlock battery."));
                 led_red();
             }
         }
     }
 
     print_sep();
-    Serial.println("Complete.");
+    Serial.println(F("Complete."));
     disable_bus();
     return true;
 }
@@ -1046,11 +1095,11 @@ void setup() {
 
     delay(500);
 
-    Serial.println("============================================");
-    Serial.println("  Makita Monitor");
-    Serial.println("  's' = rescan | auto-detects connect/disconnect");
-    Serial.println("============================================");
-    Serial.println("Waiting for battery...");
+    Serial.println(F("============================================"));
+    Serial.println(F("  Makita Monitor"));
+    Serial.println(F("  's' = rescan | auto-detects connect/disconnect"));
+    Serial.println(F("============================================"));
+    Serial.println(F("Waiting for battery..."));
 
     g_state      = WAIT_BATTERY;
     g_lastPollMs = 0;
@@ -1062,7 +1111,7 @@ void loop() {
         char c = Serial.read();
         if (c == 's' || c == 'S') {
             if (g_state != SCAN_NOW) {
-                Serial.println("Manual rescan requested.");
+                Serial.println(F("Manual rescan requested."));
                 g_state = SCAN_NOW;
             }
         }
@@ -1076,13 +1125,13 @@ void loop() {
         bool present = battery_present();
 
         if (g_state == WAIT_BATTERY && present) {
-            Serial.println("Battery detected — starting scan.");
+            Serial.println(F("Battery detected — starting scan."));
             g_state = SCAN_NOW;
         } else if (g_state == IDLE && !present) {
             Serial.println();
-            Serial.println("============================================");
-            Serial.println("  Battery removed. Waiting...");
-            Serial.println("============================================");
+            Serial.println(F("============================================"));
+            Serial.println(F("  Battery removed. Waiting..."));
+            Serial.println(F("============================================"));
             led_off();
             g_state = WAIT_BATTERY;
         }
@@ -1103,7 +1152,7 @@ void loop() {
             // Comms error or battery pulled mid-scan — return to detection loop.
             led_off();
             g_state = WAIT_BATTERY;
-            Serial.println("Waiting for battery...");
+            Serial.println(F("Waiting for battery..."));
         }
     }
 }
