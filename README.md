@@ -204,4 +204,4 @@ ESP32-C3 pin assignments can be overridden in `platformio.ini` via `ESP_EN_PIN` 
 
 
 Many thanks to the origianl project, check it out there is probably far more info and regular updates.
-https://github.com/mnh-jansson/open-battery-information/tree/main
+- [open-battery-information](https://github.com/mnh-jansson/open-battery-information/tree/main)
