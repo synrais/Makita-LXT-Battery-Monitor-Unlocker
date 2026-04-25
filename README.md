@@ -30,7 +30,7 @@ No configuration. No button presses. Just insert the battery and it runs. Remove
 
 | Colour      | Meaning                                                        |
 |-------------|----------------------------------------------------------------|
-| ⚪ White    | No battery / idle                                              |
+| Off         | No battery / idle                                              |
 | 🟢 Green    | Battery detected — scan starting                               |
 | 🔵 Blue     | Scan complete, battery healthy and unlocked                    |
 | 🟡 Yellow   | Battery locked — error reset attempts in progress              |
