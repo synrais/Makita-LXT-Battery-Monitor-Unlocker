@@ -11,7 +11,7 @@ Insert any Makita 18 V or 36 V Li-Ion pack and within 2 seconds you get a full r
 
 - ✅ **Model & identity** — reads the battery's model string and unique ROM ID
 - ⚡ **Voltage** — full pack voltage plus every individual cell, with imbalance flagging
-- 🌡️ **Temperature** — live BMS thermistor reading in °C
+- 🌡️ **Temperature** — live BMS Cell and Mosfet readings in °C
 - 🔋 **Health** — degradation score from 0–4 with a visual bar (`####`, `###-`, etc.)
 - 🔄 **Cycle count** — how many full charge/discharge cycles the pack has seen
 - 🔒 **Lock status** — LOCKED or UNLOCKED, with the specific failure code
