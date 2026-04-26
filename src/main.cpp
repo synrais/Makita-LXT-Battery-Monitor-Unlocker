@@ -9,7 +9,7 @@
 //                 Open     → SCAN mode  (white pulse)
 //
 //  Target: Waveshare RP2040 Zero + other boards
-//  Build:  PlatformIO + Adafruit NeoPixel + OneWire
+//  Build:  PlatformIO + Adafruit NeoPixel + Modified OneWire2
 // ============================================================
 
 #include <Arduino.h>
