@@ -93,7 +93,7 @@ Types 5 and 6 have their own dedicated voltage and temperature commands and are 
 ## Example Readout
 
 ![pc exe](Pictures/PC_exe.png)
-![androidapk](Pictures/Android_apk.jpg)
+![android_apk](Pictures/Android_apk.jpg)
 
 ---
 
