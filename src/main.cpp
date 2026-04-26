@@ -1,7 +1,7 @@
 // ============================================================
 //  Makita Battery Monitor + Lock Utility — Dual-Mode Firmware
 //
-//  Scan mode  : full battery scan + auto-unlock (default)
+//  Scan mode    : full battery scan + auto-unlock (default)
 //  Lock mode    : auto hard-lock sentinel for types 0 / 2 / 3
 //
 //  Mode select  : bridge GPIO 4 → GPIO 5
