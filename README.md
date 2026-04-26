@@ -80,8 +80,8 @@ All three can trigger a scan, and colourise the output (lock state, health, erro
 | Type | MCU | Voltages | Temperature | Health | Counters | Charge Level | Unlock |
 |------|-----|----------|-------------|--------|----------|--------------|--------|
 | 0 — Standard (newest) | STM32L051 (confirmed) / RAJ240 (inferred) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| 2 | Unknown — inferred from BTC04 traces | ✅ | ✅ | ✅ | ✅ | ⚠️ | ✅ |
-| 3 | Unknown — inferred from BTC04 traces | ✅ | ✅ | ✅ | ✅ | ⚠️ | ✅ |
+| 2 | Unknown — inferred from BTC04 traces | ✅ | ✅ | ✅ | ✅ | —  | ✅ |
+| 3 | Unknown — inferred from BTC04 traces | ✅ | ✅ | ✅ | ✅ | —  | ✅ |
 | 5 — F0513 based | NEC/Renesas F0513 | ✅ | ✅ | ✅ | — | — | — |
 | 6 — 10 cell | Renesas RL78 | ✅ | ✅ | ✅ | — | — | — |
 | Unknown / Old | Freescale MC908JK3E | — | — | ✅ | — | — | — |
