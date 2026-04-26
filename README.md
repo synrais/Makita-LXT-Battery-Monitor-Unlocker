@@ -42,9 +42,9 @@ No configuration. No button presses. Just insert the battery and it runs. Remove
 ## Lock Mode
 | Colour      | Meaning                                                        |
 |-------------|----------------------------------------------------------------|
-| 🟠 Orange   | Pulse, No battery / idle                                       |
+| 🔴 Red      | Pulse, No battery / idle                                       |
 | 🔵 Blue     | Battery detected — identifying                                 |
-| 🟠 Orange   | Writing lock frame to BMS                                      |
+| 🟣 Purple   | Writing lock frame to BMS                                      |
 | 🟡 Yellow   | Unsupported battery type — skipping                            |
 | 🟢 Green    | Battery successfully locked                                    |
 | 🔴 Red      | Already locked or lock failed                                  |
