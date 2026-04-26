@@ -71,7 +71,7 @@ The included apps connect automatically over USB — no serial monitor setup nee
 | Android  | `makita_battery_monitor_android_apk.zip` | Connect via USB OTG cable |
 | Any OS   | `makita_battery_monitor.py` | Python script, same features |
 
-All three trigger a scan automatically on connect and colourise the output (lock state, health, errors).
+All three can trigger a scan, and colourise the output (lock state, health, errors).
 
 ---
 
