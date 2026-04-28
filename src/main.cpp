@@ -475,16 +475,8 @@ static uint32_t read_charge_level() {
 
 // ─── Temperature ─────────────────────────────────────────────
 static float read_temperature_type56(BatteryType t) {
-    if (t == BATT_TYPE_5) {
-        // CC 52 returns a raw uint16 in centidegrees: raw / 100.0 = °C.
-        // Wire-capture verified: 0x0B9B = 2971 → 29.71 °C.
-        static const uint8_t c[] = {0x52};
-        uint8_t r[2] = {0};
-        if (cmd_cc(c, sizeof(c), r, 2) != BUS_OK) return TEMP_INVALID;
-        uint16_t raw = le16(r);
-        if (raw == 0 || raw == 0xFFFF) return TEMP_INVALID;
-        return raw / 100.0f;
-    }
+    // Type 5 temperature is read inside read_voltages_type5() via f0513_cc(CC 52).
+    // This function handles Type 6 only.
     if (t == BATT_TYPE_6) {
         // Bare 0xD2 (no Skip-ROM prefix) → 1 byte; t°C = (9323 − 40×raw) / 100
         bus_enable();
@@ -809,11 +801,10 @@ static void step_read_voltages(const BatteryInfo &info, float *vp, float cells[1
                                 float *tc, float *tm) {
     switch (info.type) {
         case BATT_TYPE_5:
-            // A brief power-cycle before the F0513 secondary reads is required.
-            // The model read leaves the BMS in a partially-used state; cutting
-            // enable resets it cleanly.
-            // Soak tested: 10 ms is sufficient.
-            bus_disable();
+            // 10 ms settle required between model read and voltage reads.
+            // The F0513 BMS needs this gap to reset internal state.
+            // Soak tested minimum. bus_disable() is NOT needed here —
+            // that was a bandaid for a hardware fault (blown RP2040 pin).
             delay(10);
             read_voltages_type5(vp, cells, info.cell_count, tc);
             break;
