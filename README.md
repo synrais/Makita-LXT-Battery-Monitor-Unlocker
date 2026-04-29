@@ -127,7 +127,7 @@ If checksums are still corrupt after a `DA 04` pass, the BMS cannot repair them 
 
 The two techniques alternate — reset, frame write, reset, frame write — up to six cycles. In practice almost all batteries unlock on the first or second attempt. If all six attempts are exhausted without success the LED turns red.
 
-Failure code 15 (BMS considered dead) is reported in the scan output but does **not** skip the unlock sequence — the alternating DA04/frame-write cycle runs regardless. Recovery is unlikely but the attempt is still made.
+Failure code 15 (BMS considered dead) is reported in the scan output but does **not** skip the unlock sequence — the alternating DA04/frame-write cycle runs regardless.
 
 ---
 
