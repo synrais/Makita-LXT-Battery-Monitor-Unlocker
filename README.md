@@ -135,12 +135,12 @@ Failure code 15 (BMS considered dead) is reported in the scan output but does **
 
 Two lock modes are available by bridging GPIO 0 to a sense pin before inserting a battery. The idle LED pulses red in both modes. Types 5, 6, and unknown are rejected — only types 0, 2, and 3 are supported.
 
-CRC Lock — bridge GPIO 0 → GPIO 2
-Corrupts the three checksum nybbles in the battery frame, forcing the BMS to treat the battery as locked. Attempted up to three times with an incrementing offset each pass. The frame is read back after each write to confirm the corruption stuck.
-
 Dead Lock — bridge GPIO 0 → GPIO 1
 Sets nybble 40 (the failure code field) to 15, flagging the battery as dead while leaving checksums intact. Reads back after each write to confirm the value survived.
 On success the LED flashes green, on failure red. Remove the bridge to return to scan/unlock mode.
+
+CRC Lock — bridge GPIO 0 → GPIO 2
+Corrupts the three checksum nybbles in the battery frame, forcing the BMS to treat the battery as locked. Attempted up to three times with an incrementing offset each pass. The frame is read back after each write to confirm the corruption stuck.
 
 ---
 
