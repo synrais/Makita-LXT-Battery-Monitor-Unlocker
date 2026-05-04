@@ -83,7 +83,7 @@ All three can trigger a scan, and colourise the output (lock state, health, erro
 | 6 — 10 cell | Renesas RL78 | ✅ | ✅ | ✅ | — | — | — |
 | Unknown / Old | Freescale MC908JK3E | — | — | ✅ | — | — | — |
 
-Types 5 and 6 have their own dedicated voltage and temperature commands and are fully read-out, but have no documented test mode, unlock, or counter commands — so none are attempted. Sending undocumented commands to these types risks corrupting BMS state with no guaranteed recovery path.
+Types 5 and 6 have their own dedicated voltage and temperature commands and are fully read-out, but have no documented test mode, unlock, or counter commands.
 
 ---
 
