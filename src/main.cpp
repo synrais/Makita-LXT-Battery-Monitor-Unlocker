@@ -1005,10 +1005,10 @@ static uint8_t derive_status_code(uint8_t byte1, uint8_t capacity) {
 // Infer variant byte 1 from the other variant bytes when byte 1 is corrupt.
 static uint8_t infer_byte1(const uint8_t d[BASIC_INFO_LEN]) {
     uint8_t china_score = 0, viet_score = 0;
-    if (d[2]  == 0xBD) china_score++; if (d[2]  == 0xB6) viet_score++;
-    if (d[3]  == 0x13) china_score++; if (d[3]  == 0xC3) viet_score++;
-    if (d[4]  == 0x14) china_score++; if (d[4]  == 0x18) viet_score++;
-    if (d[12] == 0xD0) china_score++; if (d[12] == 0x01) viet_score++;
+    if (d[2]  == 0xBD) china_score++; else if (d[2]  == 0xB6) viet_score++;
+    if (d[3]  == 0x13) china_score++; else if (d[3]  == 0xC3) viet_score++;
+    if (d[4]  == 0x14) china_score++; else if (d[4]  == 0x18) viet_score++;
+    if (d[12] == 0xD0) china_score++; else if (d[12] == 0x01) viet_score++;
     return (viet_score > china_score) ? 0x36 : 0x26;
 }
 
