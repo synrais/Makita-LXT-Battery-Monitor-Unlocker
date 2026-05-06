@@ -125,7 +125,7 @@ static constexpr uint16_t LF_FC   = 0x0001;  // nybble 40 (failure code) != 0
 static constexpr uint16_t LF_CS0  = 0x0002;  // CS0 mismatch (nybbles 0-15)
 static constexpr uint16_t LF_CS1  = 0x0004;  // CS1 mismatch (nybbles 16-31)
 static constexpr uint16_t LF_CS2  = 0x0008;  // CS2 mismatch (nybbles 32-40)
-static constexpr uint16_t LF_B0   = 0x0010;  // byte 0 == 0xA5 (corrupt/reset value, rewrite to 0xF1)
+static constexpr uint16_t LF_B0   = 0x0010;  // byte 0 == 0x00 (must not be zero)
 static constexpr uint16_t LF_B1   = 0x0020;  // byte 1 invalid (not 0x26, 0x36, or 0x31)
 static constexpr uint16_t LF_N34  = 0x0040;  // nybble 34 != 0 (charger lock nybble)
 static constexpr uint16_t LF_B18  = 0x0080;  // byte 18 == 0x00 (must not be zero)
@@ -641,7 +641,7 @@ static void derive_battery_info(const uint8_t d[BASIC_INFO_LEN], BatteryInfo &in
     if (!info.checksums_ok[0])                                        info.lock_causes |= LF_CS0;
     if (!info.checksums_ok[1])                                        info.lock_causes |= LF_CS1;
     if (!info.checksums_ok[2])                                        info.lock_causes |= LF_CS2;
-    if (d[0] == 0xA5)                                                  info.lock_causes |= LF_B0;
+    if (d[0] == 0x00)                                                  info.lock_causes |= LF_B0;
     if (d[1] != 0x26 && d[1] != 0x36 && d[1] != 0x31)               info.lock_causes |= LF_B1;
     if (nybble_get(d, 34) != 0)                                       info.lock_causes |= LF_N34;
     if (d[18] == 0x00)                                                info.lock_causes |= LF_B18;
@@ -865,8 +865,8 @@ static void print_report(const BatteryInfo &info, const VoltageReadResult &vr,
     Serial.print(F("Aux CSum 44-47 : ")); Serial.println(info.aux_checksums_ok[0] ? F("OK") : F("BAD"));
     Serial.print(F("Aux CSum 48-61 : ")); Serial.println(info.aux_checksums_ok[1] ? F("OK") : F("BAD"));
     { char buf[48];
-      if (d[0] != 0xA5) Serial.println(F("Byte 0         : OK"));
-      else { snprintf(buf,sizeof(buf),"Byte 0         : BAD (0xA5, corrupt - will rewrite to 0xF1)"); Serial.println(buf); }
+      if (d[0] != 0x00) Serial.println(F("Byte 0         : OK"));
+      else Serial.println(F("Byte 0         : BAD (0x00, must not be zero)"));
       if (d[1]==0x26||d[1]==0x36||d[1]==0x31) Serial.println(F("Byte 1         : OK"));
       else { snprintf(buf,sizeof(buf),"Byte 1         : BAD (0x%02X, must be 0x26/0x36/0x31)",d[1]); Serial.println(buf); }
       uint8_t n34=nybble_get(d,34);
@@ -1025,7 +1025,7 @@ static void send_da04() {
 
 // Comprehensive frame repair. Fixes all known lock causes while preserving
 // all salvageable battery-specific data (history, variant identity, capacity).
-// New family (0xF1, or 0xA5 corrupt which rewrites to 0xF1): full repair of all known fields.
+// New family (0xF1): full repair of all known fields.
 // Old family (0x50): minimal repair — nybble 34 and failure code only.
 static bool repair_frame(uint8_t data32[BASIC_INFO_LEN]) {
     uint8_t frame[BASIC_INFO_LEN];
@@ -1044,9 +1044,9 @@ static bool repair_frame(uint8_t data32[BASIC_INFO_LEN]) {
         nybble_set(frame, 43, checksum_calc(frame, 32, 40));
         nybble_set(frame, 62, checksum_calc(frame, 44, 47));
         nybble_set(frame, 63, checksum_calc(frame, 48, 61));
-    } else if (data32[0] == 0xF1 || data32[0] == 0xA5) {
+    } else if (data32[0] == 0xF1) {
         // ── New family: full repair ────────────────────────────
-        frame[0]  = 0xF1;
+        if (frame[0] == 0x00) frame[0] = 0xF1;
         frame[5]  = 0x58;
         frame[6]  = 0x00;
         frame[7]  = 0x00;
