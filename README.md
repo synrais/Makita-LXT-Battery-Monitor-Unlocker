@@ -30,7 +30,7 @@ No configuration. No button presses. Just insert the battery and it runs. Remove
 
 - 🔩 **Fix broken balancing tabs** — balancing tabs are the small metal strips connecting the PCB to each cell group. They commonly break from dropping the battery, mostly in 5Ah and 6Ah variants. Lift the PCB at each tab to verify it is firmly connected, if not repair with some thick wire or solderbraid.
 
-  A broken balancer tab typically shows a normal overall pack voltage, but one cell will read very low while an adjacent cell reads very high. This imbalance can force-blow the internal fuse via the heater circuit — the BMS sees simultaneous Overload and Overdischarge and triggers the thermal fuse as a last resort. The battery will continue to lock itself until the tab is repaired.
+  A broken balancer tab typically shows a normal overall pack voltage, but one cell will read very low while an adjacent cell reads very high. This imbalance can force-blow the internal fuse via a heater circuit — the BMS sees simultaneous Overload and Overdischarge and triggers the thermal fuse as a last resort. The battery will continue to lock itself until the tab is repaired.
 
 
 ---
