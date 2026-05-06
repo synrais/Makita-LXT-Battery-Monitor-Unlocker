@@ -512,7 +512,7 @@ even if all checksums are correct and nybble 34 = 0.
 
 ## 15. Outstanding Questions / Future Work
 
-- **Bytes 8-9 (nybbles 16-19):** Caused FC3 after physical power cycle with wrong values. BMS management behaviour not fully confirmed — physical remove/reinsert test (`p` command, 64 cycles) not yet completed.
+- **Bytes 8-9 (nybbles 16-19):** Caused FC3 after physical power cycle with wrong values. BMS management behaviour not fully confirmed — physical remove/reinsert test not yet completed.
 - **BL1840B frames:** No confirmed healthy frames in dataset yet. Behaviour of nybble 34 on this model unknown.
 - **Status `A5`:** Seen on dead-cell batteries of both variants. Probably fault state rather than variant ID. Needs more data.
 - **Vietnam BL1830B/BL1860B:** No frames seen. Unknown if `36 B6` extends to these models.
