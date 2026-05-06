@@ -41,18 +41,18 @@ Lift the PCB at each tab to verify it is firmly connected, if not repair with so
 ## Scan / Unlock Mode
 | Colour      | Meaning                                                        |
 |-------------|----------------------------------------------------------------|
-| ⚪ White    | *Pulse*, No battery / idle                                       |
+| ⚪ White    | **Pulse**, No battery / idle                                   |
 | 🔵 Blue     | Battery detected — scan starting                               |
 | 🟡 Yellow   | Battery locked — error reset attempts in progress              |
 | 🟣 Purple   | Frame corrupt — writing corrected frame to BMS                 |
 | 🟢 Green    | Scan complete, battery healthy and unlocked                    |
 | 🔴 Red      | Unlock failed or BMS dead                                      |
-| 🟠 Orange   | *Blink*, Major cell imbalance or broken balancer tab             |
+| 🟠 Orange   | **Blink**, Major cell imbalance or broken balancer tab         |
 
 ## Lock Mode (GPIO0→GPIO1 = Omega Lock) - Recoverable
 | Colour      | Meaning                                                        |
 |-------------|----------------------------------------------------------------|
-| 🔴 Red      | *Pulse*, No battery / idle                                       |
+| 🔴 Red      | **Pulse**, No battery / idle                                   |
 | 🔵 Blue     | Battery detected — identifying                                 |
 | 🟡 Yellow   | Unsupported battery type — skipping                            |
 | 🟣 Purple   | Writing omega lock frame to BMS                                |
