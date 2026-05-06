@@ -51,7 +51,7 @@ No configuration. No button presses. Just insert the battery and it runs. Remove
 ## Lock Mode (GPIO0→GPIO1 = Omega Lock) - Recoverable
 | Colour      | Meaning                                                        |
 |-------------|----------------------------------------------------------------|
-| 🔴 Red      | Puls, No battery / idle                                       |
+| 🔴 Red      | Pulse, No battery / idle                                       |
 | 🔵 Blue     | Battery detected — identifying                                 |
 | 🟡 Yellow   | Unsupported battery type — skipping                            |
 | 🟣 Purple   | Writing omega lock frame to BMS                                |
