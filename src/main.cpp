@@ -1044,15 +1044,8 @@ static bool repair_frame(uint8_t data32[BASIC_INFO_LEN]) {
         nybble_set(frame, 43, checksum_calc(frame, 32, 40));
         nybble_set(frame, 62, checksum_calc(frame, 44, 47));
         nybble_set(frame, 63, checksum_calc(frame, 48, 61));
-    } else {
-    uint8_t frame[BASIC_INFO_LEN];
-    memcpy(frame, data32, BASIC_INFO_LEN);
-
-    } // end old family minimal repair
-
-    // ── New family: full repair ────────────────────────────────
-    // (only entered when byte 0 == 0xF1)
-    if (data32[0] == 0xF1) {
+    } else if (data32[0] == 0xF1) {
+        // ── New family: full repair ────────────────────────────
         frame[0]  = 0xF1;
         frame[5]  = 0x58;
         frame[6]  = 0x00;
