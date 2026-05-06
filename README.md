@@ -90,7 +90,7 @@ Types 5 and 6 have their own dedicated voltage and temperature commands and are 
 
 ## Cell Imbalance Warning
 
-After any scan, if the spread between the highest and lowest cell voltage is **0.300v or greater**, the LED will give a brief **orange blink every second**
+After any scan, if the spread between the highest and lowest cell voltage is **0.300v or greater**, the LED will give a brief **orange blink every half-second**
 
 A large cell voltage spread almost always indicates a **broken balancing tab** — the small metal strip connecting the PCB to a cell group. The battery will continue locking itself until the tab is repaired.
 
