@@ -1,12 +1,10 @@
 // ============================================================
-//  Makita Battery Monitor / Unlock / Lock Utility
+//  Makita Battery Monitor / Unlock / Omega Lock Utility
 //
 //  Normal mode    : full battery scan + auto-unlock (default)
-//  Dead lock mode : sets failure-code nybble 40 = 15 on types 0 / 2 / 3
-//  CRC lock mode  : corrupts checksums on types 0 / 2 / 3
+//  Omega lock mode: sets charger lock nibble (nybble 34) non-zero
 //
-//  Mode select :  bridge GPIO0 -> GPIO1  =>  DEAD LOCK  (red pulse)
-//                 bridge GPIO0 -> GPIO2  =>  CRC LOCK   (red pulse)
+//  Mode select :  bridge GPIO0 -> GPIO1  =>  OMEGA LOCK  (red pulse)
 //                 both pins open         =>  SCAN/UNLOCK (white pulse)
 //
 //  Target : Waveshare RP2040 Zero (primary) + other Arduino boards
@@ -35,8 +33,7 @@ static constexpr uint8_t PIN_ENABLE       = 8;
 static constexpr uint8_t NEOPIXEL_OUT_PIN = 16;
 static constexpr uint8_t NUM_PIXELS       = 1;
 static constexpr uint8_t PIN_MODE_OUT     = 0;
-static constexpr uint8_t PIN_MODE_IN1     = 1;   // Dead-lock mode (bridge GPIO0-GPIO1)
-static constexpr uint8_t PIN_MODE_IN2     = 2;   // CRC-lock mode  (bridge GPIO0-GPIO2)
+static constexpr uint8_t PIN_MODE_IN1     = 1;   // Omega lock mode (bridge GPIO0-GPIO1)
 
 // On RP2040 PIN_MODE_OUT drives HIGH and the inputs use INPUT_PULLDOWN, so a
 // bridge pulls them HIGH. On other boards we drive LOW with INPUT_PULLUP.
@@ -118,6 +115,18 @@ static constexpr uint8_t  LED_PULSE_INTERVAL_MS = 20;    // how often core1 upda
 // ─── Watchdog ────────────────────────────────────────────────
 // Must exceed NO_RESPONSE_TIMEOUT_MS (10 s). Set to 12 s.
 static constexpr uint32_t WATCHDOG_TIMEOUT_MS = 12000;
+
+// ─── Lock cause flags (bitfield) ─────────────────────────────
+// Each bit represents one confirmed cause of a battery not charging.
+static constexpr uint16_t LF_FC   = 0x0001;  // nybble 40 (failure code) != 0
+static constexpr uint16_t LF_CS0  = 0x0002;  // CS0 mismatch (nybbles 0-15)
+static constexpr uint16_t LF_CS1  = 0x0004;  // CS1 mismatch (nybbles 16-31)
+static constexpr uint16_t LF_CS2  = 0x0008;  // CS2 mismatch (nybbles 32-40)
+static constexpr uint16_t LF_B0   = 0x0010;  // byte 0 invalid (not 0xF1 or 0x50)
+static constexpr uint16_t LF_B1   = 0x0020;  // byte 1 invalid (not 0x26, 0x36, or 0x31)
+static constexpr uint16_t LF_N34  = 0x0040;  // nybble 34 != 0 (charger lock nibble)
+static constexpr uint16_t LF_B18  = 0x0080;  // byte 18 == 0x00 (must not be zero)
+static constexpr uint16_t LF_B19  = 0x0100;  // byte 19 == 0x00 (must not be zero)
 
 // ─── Return codes / types ─────────────────────────────────────
 enum BasicInfoResult { BASIC_INFO_NO_RESPONSE = 0, BASIC_INFO_OK = 1, BASIC_INFO_PRE_TYPE0 = -1 };
@@ -201,6 +210,7 @@ struct BatteryInfo {
     bool         locked;
     bool         checksums_ok[3];
     bool         aux_checksums_ok[2];
+    uint16_t     lock_causes;     // bitfield of LF_* flags
 };
 
 // ─── Globals ──────────────────────────────────────────────────
@@ -279,17 +289,15 @@ static inline void led_result(bool ok) { led_flash(ok ? COL_GREEN : COL_RED); }
 
 // ─── Mode detection ───────────────────────────────────────────
 // Mode 0 = SCAN/UNLOCK  (both pins open)
-// Mode 1 = DEAD LOCK    (GPIO0-GPIO1 bridged)
-// Mode 2 = CRC LOCK     (GPIO0-GPIO2 bridged)
-enum DeviceMode { MODE_SCAN = 0, MODE_LOCK_DEAD = 1, MODE_LOCK_CRC = 2 };
+// Mode 1 = OMEGA LOCK   (GPIO0-GPIO1 bridged)
+enum DeviceMode { MODE_SCAN = 0, MODE_LOCK = 1 };
 
 static inline bool mode_pin_active(uint8_t pin) {
     return digitalRead(pin) == (MODE_PIN_ACTIVE_HIGH ? HIGH : LOW);
 }
 
 static DeviceMode mode_read() {
-    if (mode_pin_active(PIN_MODE_IN1)) return MODE_LOCK_DEAD;  // GPIO1
-    if (mode_pin_active(PIN_MODE_IN2)) return MODE_LOCK_CRC;   // GPIO2
+    if (mode_pin_active(PIN_MODE_IN1)) return MODE_LOCK;
     return MODE_SCAN;
 }
 
@@ -391,6 +399,35 @@ static void print_failure_code(uint8_t fc) {
         case FC_DEAD:       Serial.println(F("15 - Dead?")); break;
         default: Serial.print(fc); Serial.println(F(" - Invalid Error Code")); break;
     }
+}
+
+// Prints each active lock cause with aligned brackets.
+// Only prints if there are causes — nothing printed if clean.
+static void print_lock_causes(const BatteryInfo &info, const uint8_t d[BASIC_INFO_LEN]) {
+    if (info.lock_causes == 0) return;
+    Serial.println(F("Lock causes    :"));
+    char buf[48];
+    if (info.lock_causes & LF_FC) {
+        snprintf(buf, sizeof(buf), "  Nybble 40 = %u      (must be 0)", info.raw.failure_code);
+        Serial.println(buf);
+    }
+    if (info.lock_causes & LF_CS0) Serial.println(F("  CS0              (mismatch nybbles 0-15)"));
+    if (info.lock_causes & LF_CS1) Serial.println(F("  CS1              (mismatch nybbles 16-31)"));
+    if (info.lock_causes & LF_CS2) Serial.println(F("  CS2              (mismatch nybbles 32-40)"));
+    if (info.lock_causes & LF_B0) {
+        snprintf(buf, sizeof(buf), "  Byte 0 = 0x%02X    (invalid BMS family)", d[0]);
+        Serial.println(buf);
+    }
+    if (info.lock_causes & LF_B1) {
+        snprintf(buf, sizeof(buf), "  Byte 1 = 0x%02X    (invalid variant)", d[1]);
+        Serial.println(buf);
+    }
+    if (info.lock_causes & LF_N34) {
+        snprintf(buf, sizeof(buf), "  Nybble 34 = %u     (must be 0)", nybble_get(d, 34));
+        Serial.println(buf);
+    }
+    if (info.lock_causes & LF_B18) Serial.println(F("  Byte 18 = 0x00   (must not be zero)"));
+    if (info.lock_causes & LF_B19) Serial.println(F("  Byte 19 = 0x00   (must not be zero)"));
 }
 
 static void print_frame(const uint8_t d[BASIC_INFO_LEN],
@@ -588,8 +625,20 @@ static void derive_battery_info(const uint8_t d[BASIC_INFO_LEN], BatteryInfo &in
     info.checksums_ok[2] = (checksum_calc(d, 32, 40) == r.checksum_n[2]);
     info.aux_checksums_ok[0] = (checksum_calc(d, 44, 47) == r.aux_checksum_n[0]);
     info.aux_checksums_ok[1] = (checksum_calc(d, 48, 61) == r.aux_checksum_n[1]);
-    info.locked = !info.checksums_ok[0] || !info.checksums_ok[1] || !info.checksums_ok[2]
-               || ((d[20] & 0x0F) != 0);
+
+    // Build lock cause bitfield — every known cause of a battery not charging
+    info.lock_causes = 0;
+    if (r.failure_code != 0)                                          info.lock_causes |= LF_FC;
+    if (!info.checksums_ok[0])                                        info.lock_causes |= LF_CS0;
+    if (!info.checksums_ok[1])                                        info.lock_causes |= LF_CS1;
+    if (!info.checksums_ok[2])                                        info.lock_causes |= LF_CS2;
+    if (d[0] != 0xF1 && d[0] != 0x50)                                info.lock_causes |= LF_B0;
+    if (d[1] != 0x26 && d[1] != 0x36 && d[1] != 0x31)               info.lock_causes |= LF_B1;
+    if (nybble_get(d, 34) != 0)                                       info.lock_causes |= LF_N34;
+    if (d[18] == 0x00)                                                info.lock_causes |= LF_B18;
+    if (d[19] == 0x00)                                                info.lock_causes |= LF_B19;
+
+    info.locked = (info.lock_causes != 0);
 }
 
 static inline void refresh_info_from_frame(const uint8_t d[BASIC_INFO_LEN], BatteryInfo &info) {
@@ -800,12 +849,9 @@ static void print_report(const BatteryInfo &info, const VoltageReadResult &vr,
     print_sep();
     Serial.print(F("Lock status    : ")); Serial.println(info.locked ? F("LOCKED") : F("UNLOCKED"));
     Serial.print(F("Cell failure   : ")); Serial.println(info.raw.cell_failure ? F("YES") : F("No"));
-    Serial.print(F("Failure code   : ")); print_failure_code(info.raw.failure_code);
-    Serial.print(F("Checksum 0-15  : ")); Serial.println(info.checksums_ok[0] ? F("OK") : F("FAIL"));
-    Serial.print(F("Checksum 16-31 : ")); Serial.println(info.checksums_ok[1] ? F("OK") : F("FAIL"));
-    Serial.print(F("Checksum 32-40 : ")); Serial.println(info.checksums_ok[2] ? F("OK") : F("FAIL"));
     Serial.print(F("Aux CSum 44-47 : ")); Serial.println(info.aux_checksums_ok[0] ? F("OK") : F("FAIL"));
     Serial.print(F("Aux CSum 48-61 : ")); Serial.println(info.aux_checksums_ok[1] ? F("OK") : F("FAIL"));
+    if (info.locked) print_lock_causes(info, d);
 
     print_sep();
     if (info.raw.cycles > 0) {
@@ -921,14 +967,91 @@ static bool do_protected_write(const uint8_t frame[BASIC_INFO_LEN],
     return true;
 }
 
-static bool write_corrected_frame(uint8_t data32[BASIC_INFO_LEN]) {
-    uint8_t frame[BASIC_INFO_LEN]; memcpy(frame,data32,BASIC_INFO_LEN);
-    nybble_set(frame,40,0);
-    nybble_set(frame,41,checksum_calc(frame, 0, 15));
-    nybble_set(frame,42,checksum_calc(frame,16, 31));
-    nybble_set(frame,43,checksum_calc(frame,32, 40));
-    nybble_set(frame,62,checksum_calc(frame,44, 47));
-    nybble_set(frame,63,checksum_calc(frame,48, 61));
+// Derive correct status code (byte 19) from variant and capacity.
+// Used when byte 19 is corrupt (0x00 or 0xA5 with no real cell fault).
+static uint8_t derive_status_code(uint8_t byte1, uint8_t capacity) {
+    if (byte1 == 0x36) return 0x1B;           // Vietnam → BL1850B Samsung
+    // China variant — derive from capacity
+    if (capacity >= 58) return 0x67;           // BL1860B
+    if (capacity >= 48) return 0x45;           // BL1850B
+    return 0x67;                               // BL1830B and others
+}
+
+// Infer variant byte 1 from the other variant bytes when byte 1 is corrupt.
+static uint8_t infer_byte1(const uint8_t d[BASIC_INFO_LEN]) {
+    uint8_t china_score = 0, viet_score = 0;
+    if (d[2]  == 0xBD) china_score++; if (d[2]  == 0xB6) viet_score++;
+    if (d[3]  == 0x13) china_score++; if (d[3]  == 0xC3) viet_score++;
+    if (d[4]  == 0x14) china_score++; if (d[4]  == 0x18) viet_score++;
+    if (d[12] == 0xD0) china_score++; if (d[12] == 0x01) viet_score++;
+    return (viet_score > china_score) ? 0x36 : 0x26;
+}
+
+// Send DA04 error register clear. Call after a successful frame write.
+static void send_da04() {
+    power_cycle_bus();
+    if (enter_testmode() == BUS_OK) {
+        uint8_t rom[8]={0}, r[9]={0};
+        cmd_33_with_rom(CMD_RESET_ERRORS, sizeof(CMD_RESET_ERRORS), rom, r, 9);
+        exit_testmode();
+    }
+    power_cycle_bus();
+}
+
+// Comprehensive frame repair. Fixes all known lock causes while preserving
+// all salvageable battery-specific data (history, variant identity, capacity).
+// New family (0xF1): full repair of all known fields.
+// Old family (0x50): minimal repair — nybble 34 and failure code only.
+static bool repair_frame(uint8_t data32[BASIC_INFO_LEN]) {
+    uint8_t frame[BASIC_INFO_LEN];
+    memcpy(frame, data32, BASIC_INFO_LEN);
+
+    if (data32[0] == 0x50) {
+        // ── Old family: minimal safe repair ───────────────────
+        // Only touch the charger lock nibble and failure code.
+        // Preserve all other bytes — old family frame layout is different.
+        uint8_t b17 = frame[17];
+        b17 = (b17 & 0xF0);            // zero nybble 34 (low), preserve nybble 35 (high)
+        frame[17] = b17;
+        nybble_set(frame, 40, 0);
+        nybble_set(frame, 41, checksum_calc(frame,  0, 15));
+        nybble_set(frame, 42, checksum_calc(frame, 16, 31));
+        nybble_set(frame, 43, checksum_calc(frame, 32, 40));
+        nybble_set(frame, 62, checksum_calc(frame, 44, 47));
+        nybble_set(frame, 63, checksum_calc(frame, 48, 61));
+    } else {
+    uint8_t frame[BASIC_INFO_LEN];
+    memcpy(frame, data32, BASIC_INFO_LEN);
+
+    } // end old family minimal repair
+
+    // ── New family: full repair ────────────────────────────────
+    // (only entered when byte 0 == 0xF1)
+    if (data32[0] == 0xF1) {
+        frame[0]  = 0xF1;
+        frame[5]  = 0x58;
+        frame[6]  = 0x00;
+        frame[7]  = 0x00;
+        frame[10] = 0x40;
+        frame[11] = 0x21;
+        frame[13] = 0x80;
+        frame[14] = 0x02;
+        frame[22] = 0x00;
+        frame[17] = 0xD0;
+        if (frame[18] == 0x00) frame[18] = 0x8E;
+        if (frame[1] != 0x26 && frame[1] != 0x36)
+            frame[1] = infer_byte1(data32);
+        bool b19_corrupt = (frame[19] == 0x00)
+                        || (frame[19] == 0xA5 && (frame[22] & 0x04) == 0);
+        if (b19_corrupt)
+            frame[19] = derive_status_code(frame[1], data32[16]);
+        nybble_set(frame, 40, 0);
+        nybble_set(frame, 41, checksum_calc(frame,  0, 15));
+        nybble_set(frame, 42, checksum_calc(frame, 16, 31));
+        nybble_set(frame, 43, checksum_calc(frame, 32, 40));
+        nybble_set(frame, 62, checksum_calc(frame, 44, 47));
+        nybble_set(frame, 63, checksum_calc(frame, 48, 61));
+    }
     print_frame(frame, F("  Repair frame : "));
 
     if (!do_protected_write(frame, F("  "))) return false;
@@ -939,13 +1062,25 @@ static bool write_corrected_frame(uint8_t data32[BASIC_INFO_LEN]) {
         Serial.println(F("  No response during verify."));
         return false;
     }
-    bool ok0 = (checksum_calc(verify, 0,  15) == nybble_get(verify, 41));
+
+    bool ok0 = (checksum_calc(verify,  0, 15) == nybble_get(verify, 41));
     bool ok1 = (checksum_calc(verify, 16, 31) == nybble_get(verify, 42));
     bool ok2 = (checksum_calc(verify, 32, 40) == nybble_get(verify, 43));
     bool lk  = (verify[20] & 0x0F) != 0;
     Serial.print(F("  Checksums : ")); print_checksums(ok0, ok1, ok2);
+
+    if (ok0 && ok1 && ok2 && !lk) {
+        // Send DA04 to clear internal error register so battery charges on first insert
+        Serial.println(F("  DA04 clear..."));
+        send_da04();
+        uint8_t after_da04[BASIC_INFO_LEN] = {0};
+        poll_until_response(after_da04);
+        memcpy(data32, after_da04, BASIC_INFO_LEN);
+        return true;
+    }
+
     memcpy(data32, verify, BASIC_INFO_LEN);
-    return ok0 && ok1 && ok2 && !lk;
+    return false;
 }
 
 static bool type_supports_unlock(BatteryType t) { return is_type_023(t); }
@@ -1005,7 +1140,7 @@ static void step_read_health(BatteryInfo &info, const uint8_t d[BASIC_INFO_LEN])
     }
 }
 
-// ─── Unlock result handling ───────────────────────────────────
+// ─── Unlock sequence ─────────────────────────────────────────
 static void step_handle_lock(BatteryInfo &info, uint8_t d[BASIC_INFO_LEN]) {
     if (!info.locked) {
         Serial.println(F("Battery UNLOCKED."));
@@ -1020,38 +1155,51 @@ static void step_handle_lock(BatteryInfo &info, uint8_t d[BASIC_INFO_LEN]) {
         led_flash(COL_RED); return;
     }
 
-    Serial.print(F("Battery LOCKED. Failure code: ")); print_failure_code(info.raw.failure_code);
+    Serial.println(F("Battery LOCKED."));
     led_yellow();
 
     bool unlocked = false;
-    for (uint8_t attempt = 1; attempt <= UNLOCK_MAX_CYCLES && !unlocked; attempt++) {
-        Serial.print(F("--- Unlock attempt ")); Serial.println(attempt);
-        wdt_kick();
 
-        if (attempt % 2 == 1) {
-            Serial.println(F("  DA04 reset...")); led_yellow();
-            power_cycle_bus();
-            if (enter_testmode() != BUS_OK) {
-                if (!wait_for_response()) { continue; }
-                if (enter_testmode() != BUS_OK) { Serial.println(F("  Still no presence. Skipping.")); continue; }
-            }
-            { uint8_t rom[8]={0}, r[9]={0};
-              cmd_33_with_rom(CMD_RESET_ERRORS, sizeof(CMD_RESET_ERRORS), rom, r, 9); }
-            exit_testmode();
-            power_cycle_bus();
-            uint8_t verify[BASIC_INFO_LEN] = {0};
-            if (!poll_until_response(verify)) { continue; }
+    // Step 1 — DA04: clears internal error register.
+    // Handles naturally locked batteries (overdischarge, overload) on all types.
+    // Type 2 batteries self-repair entirely via DA04.
+    Serial.println(F("--- Step 1: DA04 reset"));
+    led_yellow();
+    power_cycle_bus();
+    if (enter_testmode() == BUS_OK) {
+        uint8_t rom[8]={0}, r[9]={0};
+        cmd_33_with_rom(CMD_RESET_ERRORS, sizeof(CMD_RESET_ERRORS), rom, r, 9);
+        exit_testmode();
+        power_cycle_bus();
+        uint8_t verify[BASIC_INFO_LEN] = {0};
+        if (poll_until_response(verify)) {
             memcpy(d, verify, BASIC_INFO_LEN);
             refresh_info_from_frame(d, info);
-            Serial.print(F("  Checksums : ")); print_checksums(info.checksums_ok[0], info.checksums_ok[1], info.checksums_ok[2]);
-            if (!info.locked) { Serial.println(F("  -> UNLOCKED by DA04.")); unlocked = true; }
-            else               Serial.println(F("  -> Still locked."));
-        } else {
-            Serial.println(F("  Frame repair...")); led_purple();
-            if (write_corrected_frame(d)) {
-                refresh_info_from_frame(d, info);
-                Serial.println(F("  -> Frame repair succeeded. UNLOCKED."));
+            if (!info.locked) {
+                Serial.println(F("  -> UNLOCKED by DA04."));
                 unlocked = true;
+            } else {
+                Serial.println(F("  -> Still locked. Proceeding to frame repair."));
+            }
+        }
+    }
+
+    // Step 2 — Comprehensive frame repair.
+    // Fixes all known corrupt fields: lock nibble, checksums, failure code,
+    // variant bytes, status code, constants. Followed by DA04 internally.
+    if (!unlocked) {
+        for (uint8_t attempt = 1; attempt <= UNLOCK_MAX_CYCLES && !unlocked; attempt++) {
+            Serial.print(F("--- Step 2: Frame repair (attempt ")); Serial.print(attempt); Serial.println(F(")"));
+            led_purple();
+            wdt_kick();
+            if (repair_frame(d)) {
+                refresh_info_from_frame(d, info);
+                if (!info.locked) {
+                    Serial.println(F("  -> Frame repair succeeded. UNLOCKED."));
+                    unlocked = true;
+                } else {
+                    Serial.println(F("  -> Repaired but still locked. Retrying."));
+                }
             } else {
                 Serial.println(F("  -> Frame repair failed."));
             }
@@ -1063,85 +1211,28 @@ static void step_handle_lock(BatteryInfo &info, uint8_t d[BASIC_INFO_LEN]) {
 }
 
 // ═══════════════════════════════════════════════════════════════
-//  LOCK MODES (CRC + DEAD)
+//  OMEGA LOCK
+//  Sets nybble 34 (charger lock nibble) to a non-zero value.
+//  The original Makita charger lock mechanism — present in all batteries.
+//  Fully reversible by repair_frame().
 // ═══════════════════════════════════════════════════════════════
 
-static bool checksums_bad(const uint8_t *buf) {
-    return (checksum_calc(buf, 0,  15) != nybble_get(buf, 41))
-        || (checksum_calc(buf, 16, 31) != nybble_get(buf, 42))
-        || (checksum_calc(buf, 32, 40) != nybble_get(buf, 43));
-}
-
-struct LockStrategy {
-    void (*mutate)(uint8_t v[BASIC_INFO_LEN], uint8_t attempt);
-    bool (*verify)(const uint8_t v[BASIC_INFO_LEN]);
-    void (*report)(const uint8_t v[BASIC_INFO_LEN]);
-    bool (*already_locked)(const uint8_t frame[BASIC_INFO_LEN]);
-    bool is_crc;
-};
-
-static void crc_mutate(uint8_t v[BASIC_INFO_LEN], uint8_t attempt) {
-    uint8_t cs0 = (checksum_calc(v,  0, 15) + attempt) & 0xF;
-    uint8_t cs1 = (checksum_calc(v, 16, 31) + attempt) & 0xF;
-    uint8_t cs2 = (checksum_calc(v, 32, 40) + attempt) & 0xF;
-    nybble_set(v, 41, cs0);
-    nybble_set(v, 42, cs1);
-    nybble_set(v, 40, cs2);  // corrupt nybble 40 (failure code, inside range 32..40)
-    nybble_set(v, 43, cs2);
-}
-static bool crc_verify(const uint8_t v[BASIC_INFO_LEN]) { return checksums_bad(v); }
-static void crc_report(const uint8_t v[BASIC_INFO_LEN]) {
-    Serial.print(F("  [Lock] Checksums : "));
-    print_checksums(checksum_calc(v, 0,  15) == nybble_get(v, 41),
-                    checksum_calc(v, 16, 31) == nybble_get(v, 42),
-                    checksum_calc(v, 32, 40) == nybble_get(v, 43));
-}
-static bool crc_already_locked(const uint8_t frame[BASIC_INFO_LEN])  { return checksums_bad(frame); }
-
-static void dead_mutate(uint8_t v[BASIC_INFO_LEN], uint8_t) {
-    nybble_set(v, 40, FC_DEAD);
-    // Recalculate checksum 43 (covers nybbles 32..40) so the frame is
-    // internally consistent. The BMS treats FC_DEAD (15) as a dead battery
-    // regardless of checksum state — a valid frame is a cleaner lock.
+static void omega_mutate(uint8_t v[BASIC_INFO_LEN]) {
+    // Set nybble 34 = 4, preserve nybble 35 = D → byte 17 = 0xD4
+    v[17] = 0xD4;
+    // Recalculate CS2 (covers nybbles 32-40, includes byte 17)
     nybble_set(v, 43, checksum_calc(v, 32, 40));
 }
-static bool dead_verify(const uint8_t v[BASIC_INFO_LEN]) {
-    return nybble_get(v, 40) == FC_DEAD
-        && nybble_get(v, 43) == checksum_calc(v, 32, 40);
-}
-static void dead_report(const uint8_t v[BASIC_INFO_LEN]) {
-    Serial.print(F("  [Lock] Failure code nybble 40 = ")); Serial.println(nybble_get(v, 40));
-}
-static bool dead_already_locked(const uint8_t frame[BASIC_INFO_LEN]) {
-    return nybble_get(frame, 40) == FC_DEAD
-        && nybble_get(frame, 43) == checksum_calc(frame, 32, 40);
+
+static bool omega_verify(const uint8_t v[BASIC_INFO_LEN]) {
+    return nybble_get(v, 34) != 0;
 }
 
-static const LockStrategy STRAT_CRC  = { crc_mutate,  crc_verify,  crc_report,  crc_already_locked,  true  };
-static const LockStrategy STRAT_DEAD = { dead_mutate, dead_verify, dead_report, dead_already_locked, false };
-
-static bool lock_apply(uint8_t frame[BASIC_INFO_LEN], const LockStrategy &s) {
-    uint8_t v[BASIC_INFO_LEN];
-    memcpy(v, frame, BASIC_INFO_LEN);
-    for (uint8_t attempt = 1; attempt <= LOCK_MAX_ATTEMPTS; attempt++) {
-        Serial.print(F("  [Lock] Attempt ")); Serial.println(attempt);
-        wdt_kick();
-        s.mutate(v, attempt);
-        led_purple();
-        if (!do_protected_write(v, F("  [Lock] "))) return false;
-        power_cycle_bus();
-        if (!poll_until_response(v)) {
-            Serial.println(F("  [Lock] No response.")); return false;
-        }
-        s.report(v);
-        if (s.verify(v)) return true;
-        memcpy(v, frame, BASIC_INFO_LEN);
-    }
-    Serial.println(F("  [Lock] Failed after all attempts."));
-    return false;
+static bool omega_already_locked(const uint8_t frame[BASIC_INFO_LEN]) {
+    return nybble_get(frame, 34) != 0;
 }
 
-static bool run_lock_common(const LockStrategy &s) {
+static bool run_lock() {
     if (g_in_testmode) exit_testmode();
     power_cycle_bus(); led_blue();
 
@@ -1155,30 +1246,41 @@ static bool run_lock_common(const LockStrategy &s) {
         else                            { Serial.println(F("  [Lock] ERROR: No valid frame."));          led_flash(COL_RED); }
         bus_disable(); return false;
     }
-    if (!rom_ok) Serial.println(F("  [Lock] WARNING: ROM ID read failed; type detection may be unreliable."));
+    if (!rom_ok) Serial.println(F("  [Lock] WARNING: ROM ID read failed."));
 
     int8_t type = lock_detect_type(rom_id, frame);
     Serial.print(F("  [Lock] Type: "));
     if (type < 0) { Serial.println(F("unsupported (5, 6, or unknown).")); led_yellow(); bus_disable(); return false; }
     Serial.println(type);
 
-    if (s.already_locked(frame)) {
-        Serial.println(s.is_crc ? F("  [Lock] Battery is already CRC LOCKED.")
-                                : F("  [Lock] Battery already has failure code 15."));
+    if (omega_already_locked(frame)) {
+        Serial.println(F("  [Lock] Battery already OMEGA LOCKED (nybble 34 != 0)."));
         led_flash(COL_RED); bus_disable(); return true;
     }
 
-    bool ok = lock_apply(frame, s);
+    bool ok = false;
+    for (uint8_t attempt = 1; attempt <= LOCK_MAX_ATTEMPTS && !ok; attempt++) {
+        Serial.print(F("  [Lock] Attempt ")); Serial.println(attempt);
+        wdt_kick();
+        uint8_t v[BASIC_INFO_LEN];
+        memcpy(v, frame, BASIC_INFO_LEN);
+        omega_mutate(v);
+        led_purple();
+        if (!do_protected_write(v, F("  [Lock] "))) { bus_disable(); return false; }
+        power_cycle_bus();
+        uint8_t verify[BASIC_INFO_LEN] = {0};
+        if (!poll_until_response(verify)) { Serial.println(F("  [Lock] No response.")); break; }
+        Serial.print(F("  [Lock] Nybble 34 = ")); Serial.println(nybble_get(verify, 34));
+        ok = omega_verify(verify);
+    }
+
     print_sep();
-    if (ok) Serial.println(s.is_crc ? F("  [Lock] CRC LOCKED.") : F("  [Lock] DEAD LOCKED."));
+    if (ok) Serial.println(F("  [Lock] OMEGA LOCKED. Nybble 34 set non-zero."));
     else    Serial.println(F("  [Lock] FAILED."));
     print_sep();
     led_result(ok); bus_disable();
     return ok;
 }
-
-static bool run_lock()      { return run_lock_common(STRAT_CRC);  }
-static bool run_dead_lock() { return run_lock_common(STRAT_DEAD); }
 
 // ─── Main scan ───────────────────────────────────────────────
 static bool run_scan() {
@@ -1258,11 +1360,9 @@ void setup() {
 #if defined(ARDUINO_ARCH_RP2040)
     pinMode(PIN_MODE_OUT, OUTPUT); digitalWrite(PIN_MODE_OUT, HIGH);
     pinMode(PIN_MODE_IN1, INPUT_PULLDOWN);
-    pinMode(PIN_MODE_IN2, INPUT_PULLDOWN);
 #else
     pinMode(PIN_MODE_OUT, OUTPUT); digitalWrite(PIN_MODE_OUT, LOW);
     pinMode(PIN_MODE_IN1, INPUT_PULLUP);
-    pinMode(PIN_MODE_IN2, INPUT_PULLUP);
     delay(750);  // pullups need time to settle before mode_read()
 #endif
     g_pixel.begin(); g_pixel.setBrightness(LED_BRIGHTNESS_MAX); led_off();
@@ -1271,20 +1371,15 @@ void setup() {
     Serial.print(F("  Firmware v")); Serial.println(F(FIRMWARE_VERSION));
     DeviceMode m = mode_read();
     switch (m) {
-        case MODE_LOCK_DEAD:
-            Serial.println(F("  Makita DEAD LOCK Utility - Types 0 / 2 / 3 only"));
-            Serial.println(F("  GPIO0-GPIO1 bridged -> DEAD LOCK MODE (nybble 40 = 15)"));
-            Serial.println(F("  Remove bridge to switch to scan/unlock mode."));
-            break;
-        case MODE_LOCK_CRC:
-            Serial.println(F("  Makita CRC LOCK Utility - Types 0 / 2 / 3 only"));
-            Serial.println(F("  GPIO0-GPIO2 bridged -> CRC LOCK MODE"));
+        case MODE_LOCK:
+            Serial.println(F("  Makita OMEGA LOCK Utility - Types 0 / 2 / 3 only"));
+            Serial.println(F("  GPIO0-GPIO1 bridged -> OMEGA LOCK MODE (nybble 34)"));
             Serial.println(F("  Remove bridge to switch to scan/unlock mode."));
             break;
         default:
             Serial.println(F("  Makita Monitor - Scan / Unlock Mode"));
             Serial.println(F("  's' = rescan | auto-detects connect/disconnect"));
-            Serial.println(F("  Bridge GPIO0-GPIO1 for dead lock, GPIO0-GPIO2 for CRC lock."));
+            Serial.println(F("  Bridge GPIO0-GPIO1 for Omega lock."));
             break;
     }
     print_sep();
@@ -1311,13 +1406,9 @@ void loop() {
                 led_off(); g_state = WAIT_BATTERY;
                 print_sep();
                 switch (cur_mode) {
-                    case MODE_LOCK_DEAD:
-                        Serial.println(F("  Mode changed -> DEAD LOCK MODE"));
+                    case MODE_LOCK:
+                        Serial.println(F("  Mode changed -> OMEGA LOCK MODE"));
                         Serial.println(F("  GPIO0-GPIO1 bridged. Insert battery to lock."));
-                        break;
-                    case MODE_LOCK_CRC:
-                        Serial.println(F("  Mode changed -> CRC LOCK MODE"));
-                        Serial.println(F("  GPIO0-GPIO2 bridged. Insert battery to lock."));
                         break;
                     default:
                         Serial.println(F("  Mode changed -> SCAN / UNLOCK MODE"));
@@ -1344,19 +1435,14 @@ void loop() {
         bool present = battery_present();
         if (g_state==WAIT_BATTERY && present) {
             print_sep();
-            switch (cur_mode) {
-                case MODE_LOCK_CRC:  Serial.println(F("  [Lock] Battery detected - CRC locking..."));  break;
-                case MODE_LOCK_DEAD: Serial.println(F("  [Lock] Battery detected - dead locking...")); break;
-                default:             Serial.println(F("  Battery detected - starting scan."));          break;
-            }
+            if (cur_mode == MODE_LOCK) Serial.println(F("  [Lock] Battery detected - omega locking..."));
+            else                       Serial.println(F("  Battery detected - starting scan."));
             print_sep();
             g_state = SCAN_PENDING;
         } else if ((g_state==IDLE || g_state==UNSUPPORTED) && !present) {
             print_sep();
-            if (cur_mode == MODE_LOCK_CRC || cur_mode == MODE_LOCK_DEAD)
-                Serial.println(F("  [Lock] Battery removed. Waiting for next..."));
-            else
-                Serial.println(F("  Battery removed. Waiting..."));
+            if (cur_mode == MODE_LOCK) Serial.println(F("  [Lock] Battery removed. Waiting for next..."));
+            else                       Serial.println(F("  Battery removed. Waiting..."));
             print_sep();
             led_off(); g_state = WAIT_BATTERY;
         }
@@ -1374,9 +1460,8 @@ void loop() {
     // Execute pending action
     if (g_state==SCAN_PENDING) {
         bool ok;
-        if      (cur_mode == MODE_LOCK_CRC)  ok = run_lock();
-        else if (cur_mode == MODE_LOCK_DEAD) ok = run_dead_lock();
-        else                                 ok = run_scan();
+        if (cur_mode == MODE_LOCK) ok = run_lock();
+        else                       ok = run_scan();
         g_state = ok ? IDLE : UNSUPPORTED;
         if (!ok) Serial.println(F("  Remove battery and try again."));
     }
