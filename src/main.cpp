@@ -109,8 +109,11 @@ static constexpr uint8_t  LED_BRIGHTNESS_MAX    = 80;
 static constexpr uint8_t  LED_FLASH_COUNT       = 3;
 static constexpr uint16_t LED_FLASH_ON_MS       = 200;
 static constexpr uint16_t LED_FLASH_OFF_MS      = 100;
-static constexpr uint16_t LED_PULSE_PERIOD_MS   = 2000;  // full breathe cycle (ms)
-static constexpr uint8_t  LED_PULSE_INTERVAL_MS = 20;    // how often core1 updates the pulse
+static constexpr uint16_t LED_PULSE_PERIOD_MS        = 2000;  // full breathe cycle (ms)
+static constexpr uint8_t  LED_PULSE_INTERVAL_MS      = 20;    // how often core1 updates the pulse
+static constexpr float    IMBALANCE_THRESHOLD_V      = 0.300f;// cell diff above this = physical warning
+static constexpr uint16_t IMBALANCE_BLIP_INTERVAL_MS = 1000;  // orange blip every N ms when imbalanced
+static constexpr uint16_t IMBALANCE_BLIP_ON_MS       = 80;    // blip duration
 
 // ─── Watchdog ────────────────────────────────────────────────
 // Must exceed NO_RESPONSE_TIMEOUT_MS (10 s). Set to 12 s.
@@ -242,16 +245,22 @@ static void safe_delay(uint32_t ms) {
 // ─── Core 1 — LED animation flags ────────────────────────────
 static volatile bool g_pulse_active    = false;
 static volatile bool g_pulse_scan_mode = true;
+static volatile bool g_imbalance       = false;
 
 // ─── NeoPixel ────────────────────────────────────────────────
 struct Colour { uint8_t r, g, b; };
 static constexpr Colour COL_OFF    = {  0,                  0,                  0 };
 static constexpr Colour COL_GREEN  = {  0, LED_BRIGHTNESS_MAX,                  0 };
 static constexpr Colour COL_YELLOW = { LED_BRIGHTNESS_MAX, 60,                  0 };
+static constexpr Colour COL_ORANGE = { LED_BRIGHTNESS_MAX, 40,                  0 };
 static constexpr Colour COL_BLUE   = {  0,                  0, LED_BRIGHTNESS_MAX };
 static constexpr Colour COL_RED    = { LED_BRIGHTNESS_MAX,  0,                  0 };
 static constexpr Colour COL_PURPLE = { LED_BRIGHTNESS_MAX,  0, LED_BRIGHTNESS_MAX };
 static constexpr Colour COL_WHITE  = { LED_BRIGHTNESS_MAX, LED_BRIGHTNESS_MAX, LED_BRIGHTNESS_MAX };
+
+static volatile uint8_t g_result_r = 0;
+static volatile uint8_t g_result_g = 0;
+static volatile uint8_t g_result_b = 0;
 
 static void led_set(Colour c) {
     g_pixel.setPixelColor(0, g_pixel.Color(c.r, c.g, c.b));
@@ -839,7 +848,7 @@ static void print_report(const BatteryInfo &info, const VoltageReadResult &vr,
         Serial.println(F("(unavailable)"));
     }
     Serial.print(F("Detected type  : ")); Serial.println(batt_type_to_int(info.type));
-    Serial.print(F("Battery type   : ")); Serial.print(info.raw.batt_type); Serial.print(F("  ("));
+    Serial.print(F("Battery type   : ")); Serial.print(info.raw.batt_type); Serial.print(F("v  ("));
     if      (info.raw.batt_type<13) Serial.print(F("4 cell BL14xx"));
     else if (info.raw.batt_type<30) Serial.print(F("5 cell BL18xx"));
     else                            Serial.print(F("10 cell BL36xx"));
@@ -849,8 +858,24 @@ static void print_report(const BatteryInfo &info, const VoltageReadResult &vr,
     print_sep();
     Serial.print(F("Lock status    : ")); Serial.println(info.locked ? F("LOCKED") : F("UNLOCKED"));
     Serial.print(F("Cell failure   : ")); Serial.println(info.raw.cell_failure ? F("YES") : F("No"));
-    Serial.print(F("Aux CSum 44-47 : ")); Serial.println(info.aux_checksums_ok[0] ? F("OK") : F("FAIL"));
-    Serial.print(F("Aux CSum 48-61 : ")); Serial.println(info.aux_checksums_ok[1] ? F("OK") : F("FAIL"));
+    Serial.print(F("Failure code   : ")); print_failure_code(info.raw.failure_code);
+    Serial.print(F("Checksum 0-15  : ")); Serial.println(info.checksums_ok[0] ? F("OK") : F("BAD"));
+    Serial.print(F("Checksum 16-31 : ")); Serial.println(info.checksums_ok[1] ? F("OK") : F("BAD"));
+    Serial.print(F("Checksum 32-40 : ")); Serial.println(info.checksums_ok[2] ? F("OK") : F("BAD"));
+    Serial.print(F("Aux CSum 44-47 : ")); Serial.println(info.aux_checksums_ok[0] ? F("OK") : F("BAD"));
+    Serial.print(F("Aux CSum 48-61 : ")); Serial.println(info.aux_checksums_ok[1] ? F("OK") : F("BAD"));
+    { char buf[48];
+      if (d[0]==0xF1||d[0]==0x50) Serial.println(F("Byte 0         : OK"));
+      else { snprintf(buf,sizeof(buf),"Byte 0         : BAD (0x%02X, must be 0xF1 or 0x50)",d[0]); Serial.println(buf); }
+      if (d[1]==0x26||d[1]==0x36||d[1]==0x31) Serial.println(F("Byte 1         : OK"));
+      else { snprintf(buf,sizeof(buf),"Byte 1         : BAD (0x%02X, must be 0x26/0x36/0x31)",d[1]); Serial.println(buf); }
+      uint8_t n34=nybble_get(d,34);
+      if (n34==0) Serial.println(F("Nybble 34      : OK"));
+      else { snprintf(buf,sizeof(buf),"Nybble 34      : BAD (0x%X, must be 0)",n34); Serial.println(buf); }
+      if (d[18]!=0x00) Serial.println(F("Byte 18        : OK"));
+      else Serial.println(F("Byte 18        : BAD (0x00, must not be 0)"));
+      if (d[19]!=0x00) Serial.println(F("Byte 19        : OK"));
+      else Serial.println(F("Byte 19        : BAD (0x00, must not be 0)")); }
     if (info.locked) print_lock_causes(info, d);
 
     print_sep();
@@ -1212,9 +1237,9 @@ static void step_handle_lock(BatteryInfo &info, uint8_t d[BASIC_INFO_LEN]) {
 
 // ═══════════════════════════════════════════════════════════════
 //  OMEGA LOCK
-//  Sets nybble 34 (charger lock nibble) to a non-zero value.
-//  The original Makita charger lock mechanism — present in all batteries.
-//  Fully reversible by repair_frame().
+//  Sets nybble 34 (original Makita charger lock nibble) non-zero.
+//  Present in ALL Makita LXT batteries. Charger rejects if non-zero.
+//  DA04 cannot undo this lock. Only repair_frame() can restore it.
 // ═══════════════════════════════════════════════════════════════
 
 static void omega_mutate(uint8_t v[BASIC_INFO_LEN]) {
@@ -1324,8 +1349,31 @@ static bool run_scan() {
 
     if (!vr.ok) Serial.println(F("WARNING: voltage read failed; cell data may be missing."));
     print_sep(); print_report(info, vr, data32); print_sep();
+
+    // Detect cell imbalance — warn via orange blip after result
+    bool imbalanced = false;
+    if (vr.cells.valid && vr.cells.n > 1) {
+        float vmax=vr.cells.v[0], vmin=vr.cells.v[0];
+        for (uint8_t i=1;i<vr.cells.n;i++) {
+            if (vr.cells.v[i]>vmax) vmax=vr.cells.v[i];
+            if (vr.cells.v[i]<vmin) vmin=vr.cells.v[i];
+        }
+        if ((vmax-vmin) >= IMBALANCE_THRESHOLD_V) {
+            imbalanced = true;
+            Serial.print(F("WARNING: Cell imbalance "));
+            Serial.print(vmax-vmin, 3);
+            Serial.println(F("V — check balancing tabs."));
+        }
+    }
+
     step_handle_lock(info, data32);
     print_sep(); Serial.println(F("Complete."));
+
+    // Set imbalance blip — orange over result colour
+    g_imbalance     = imbalanced;
+    Colour rc = info.locked ? COL_RED : COL_GREEN;
+    g_result_r = rc.r; g_result_g = rc.g; g_result_b = rc.b;
+
     bus_disable(); g_charger_arm_issued = false;
     return true;
 }
@@ -1338,6 +1386,16 @@ void setup1() { /* nothing needed */ }
 void loop1() {
     if (g_pulse_active) {
         led_pulse(g_pulse_scan_mode ? COL_WHITE : COL_RED);
+        delay(LED_PULSE_INTERVAL_MS);
+        return;
+    }
+    if (g_imbalance) {
+        // Orange blip every IMBALANCE_BLIP_INTERVAL_MS over the result colour
+        delay(IMBALANCE_BLIP_INTERVAL_MS - IMBALANCE_BLIP_ON_MS);
+        led_set(COL_ORANGE);
+        delay(IMBALANCE_BLIP_ON_MS);
+        led_set({(uint8_t)g_result_r, (uint8_t)g_result_g, (uint8_t)g_result_b});
+        return;
     }
     delay(LED_PULSE_INTERVAL_MS);
 }
@@ -1444,7 +1502,7 @@ void loop() {
             if (cur_mode == MODE_LOCK) Serial.println(F("  [Lock] Battery removed. Waiting for next..."));
             else                       Serial.println(F("  Battery removed. Waiting..."));
             print_sep();
-            led_off(); g_state = WAIT_BATTERY;
+            led_off(); g_state = WAIT_BATTERY; g_imbalance = false;
         }
     }
 
