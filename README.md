@@ -17,9 +17,8 @@ Insert any Makita 18 V or 36 V LXT Li-Ion pack and within 2 seconds you get a fu
 - 🔒 **Lock status** — LOCKED or UNLOCKED, with the specific failure code
 - 💡 **Status LED** — RP2040 Zero onboard NeoPixel LED shows device state at a glance
 - 🛠️ **Auto-unlock** — performs a charger-style unlock sequence automatically on locked packs
-- 🔧 **Frame repair** — recalculates and rewrites corrupt checksums without touching any other battery data
-- ☠️ **Dead lock** — sets failure code 15 with correct checksums if GPIO0→GPIO1 bridged - Recoverable
-- 🔐 **CRC lock** — corrupts checksums if GPIO0→GPIO2 bridged - Recoverable
+- 🔧 **Frame repair** — comprehensively repairs all known corrupt fields whilst preserving all salvageable battery data
+- 🔐 **Omega lock** — sets the original Makita charger lock nibble (nybble 34) non-zero if GPIO0→GPIO1 bridged — Recoverable
   
 No configuration. No button presses. Just insert the battery and it runs. Remove it and the device waits for the next one.
 
@@ -48,14 +47,14 @@ No configuration. No button presses. Just insert the battery and it runs. Remove
 | 🟢 Green    | Scan complete, battery healthy and unlocked                    |
 | 🔴 Red      | Unlock failed or BMS dead                                      |
 
-## Lock Modes (GPIO0→GPIO1 = Dead Lock, GPIO0→GPIO2 = CRC Lock) - Recoverable
+## Lock Mode (GPIO0→GPIO1 = Omega Lock) - Recoverable
 | Colour      | Meaning                                                        |
 |-------------|----------------------------------------------------------------|
 | 🔴 Red      | Pulse, No battery / idle                                       |
 | 🔵 Blue     | Battery detected — identifying                                 |
 | 🟡 Yellow   | Unsupported battery type — skipping                            |
-| 🟣 Purple   | Writing lock frame to BMS                                      |
-| 🟢 Green    | Battery successfully locked                                    |
+| 🟣 Purple   | Writing omega lock frame to BMS                                |
+| 🟢 Green    | Battery successfully omega locked                              |
 | 🔴 Red      | Already locked or lock failed                                  |
 
 ---
@@ -126,31 +125,38 @@ Available on most battery types. This is the BMS's own internal coarse estimate,
 
 ## Auto-Unlock
 
-If a battery is locked, the monitor performs a charger-style unlock sequence automatically. It alternates between two techniques for up to six attempts total, stopping as soon as a pass declares success.
+If a battery is locked, the monitor performs an unlock sequence automatically. It stops as soon as a pass declares success.
 
-### Odd attempts — Error reset (yellow)
-The monitor power-cycles the bus, enters test mode, and sends the standard `DA 04` error-reset command. This tells the BMS to attempt its own self-repair. The bus is then re-read and all three checksums are verified. This handles the most common lock conditions — a single pass is usually enough. If all checksums come back clean the battery is unlocked and the sequence stops.
+### Step 1 — Error reset (yellow)
+The monitor power-cycles the bus, enters test mode, and sends the standard `DA 04` error-reset command. This tells the BMS to clear its internal error register and attempt its own self-repair. The bus is then re-read and all lock causes are checked. This handles the most common real-world lock conditions — overdischarge, overload, naturally triggered failure codes. A single pass is usually enough for naturally locked batteries on all battery types.
 
-### Even attempts — Frame write (purple)
-If checksums are still corrupt after a `DA 04` pass, the BMS cannot repair them itself. The monitor reads the battery's live data frame, recalculates the correct checksum values from the actual data already stored, and writes the corrected frame back to the BMS. Only the checksum nybbles are changed — cycle count, capacity, health history, and all other data are left completely untouched. The written frame is read back immediately and verified before declaring success.
+### Step 2 — Comprehensive frame repair (purple)
+If the battery is still locked after DA04, the monitor performs a full frame repair. This goes well beyond checksum correction — it fixes every known lock cause in a single write:
 
-The two techniques alternate — reset, frame write, reset, frame write — up to six cycles. In practice almost all batteries unlock on the first or second attempt. If all six attempts are exhausted without success the LED turns red.
+- **Nybble 34** — charger lock nibble restored to 0
+- **Failure code** — nybble 40 cleared to 0
+- **Universal constants** — all known fixed-value bytes restored if corrupt
+- **Byte 1** — variant identifier restored if invalid
+- **Status code** — byte 19 restored from variant + capacity if corrupt or zero
+- **All 5 checksums** — recalculated from the corrected frame
 
-DEAD, OVERLOADED, WARNING or any non-zero failure code, and/or corrupt checksums, all set locked = true and proceed into the unlock sequence.
+All battery-specific data is preserved — cycle count, OD counter, overload counter, capacity, health history, and unknown runtime fields are left completely untouched. After a successful frame write, a DA04 is sent automatically to clear the internal error register so the battery charges on first charger insert.
+
+Frame repair is attempted up to six times. In practice almost all batteries unlock on the first or second attempt. If all attempts are exhausted without success the LED turns red.
+
+DEAD, OVERLOADED, WARNING or any non-zero failure code, corrupt checksums, invalid variant bytes, non-zero charger lock nibble, or zero status/constant bytes all contribute to the locked state and proceed into the unlock sequence.
 
 ---
 
-## Lock Modes
+## Lock Mode
 
-Bridging GPIO0 → GPIO1 switches the device into **Dead Lock mode** (idle LED pulses red). Bridging GPIO0 → GPIO2 switches into **CRC Lock mode** (idle LED pulses red). Both modes are intended for testing — they deliberately force a battery into a locked state.
+Bridging GPIO0 → GPIO1 switches the device into **Omega Lock mode** (idle LED pulses red). This mode sets the original Makita charger lock nibble — nybble 34 — to a non-zero value. The charger checks this nibble before allowing charging to begin, a mechanism present in every Makita LXT battery from the earliest protocol through to current production.
 
-**Dead Lock** sets failure-code nybble 40 to 15 (DEAD) and recalculates the checksum covering that range so the frame remains internally consistent. This is the cleaner lock — all checksums pass.
+The frame remains internally consistent — all checksums are valid, no failure codes are set. The battery will report UNLOCKED to software that only checks checksums and failure codes, but the charger rejects it. DA04 (error reset) will fix this on older batteries, newer batteries the BMS may see this old fault flag and set the new fault flag nybble 40 to 3 corrupting checksums, both of which are recoverably only using this project.
 
-**CRC Lock** corrupts the checksum nybbles directly, leaving the frame in an inconsistent state. The BMS rejects the frame because the checksums don't match the data.
+When a battery is detected the device reads the frame and identifies the battery type. Types 5, 6, and unknown are rejected immediately (yellow LED) — only types 0, 2, and 3 are supported. If the battery is already omega locked, the device reports it and stops.
 
-In both modes, when a battery is detected the device reads the frame and identifies the battery type. Types 5, 6, and unknown are rejected immediately (yellow LED) — only types 0, 2, and 3 are supported. If the battery is already locked, the device reports it and stops.
-
-Lock is attempted up to three times per mode. After each write the frame is read back to confirm the lock was applied. On success the LED flashes green. On failure it flashes red. Remove the bridge to return to scan/unlock mode.
+Lock is attempted up to six times. After each write the frame is read back to confirm nybble 34 is non-zero. On success the LED flashes green. On failure it flashes red. Remove the bridge to return to scan/unlock mode.
 
 ---
 
