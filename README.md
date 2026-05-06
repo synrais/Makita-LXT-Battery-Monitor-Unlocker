@@ -46,11 +46,12 @@ No configuration. No button presses. Just insert the battery and it runs. Remove
 | 🟣 Purple   | Checksums corrupt — writing corrected frame to BMS             |
 | 🟢 Green    | Scan complete, battery healthy and unlocked                    |
 | 🔴 Red      | Unlock failed or BMS dead                                      |
+| 🟠 Orange   | Blink, Major cell imbalance or broken balancer tab             |
 
 ## Lock Mode (GPIO0→GPIO1 = Omega Lock) - Recoverable
 | Colour      | Meaning                                                        |
 |-------------|----------------------------------------------------------------|
-| 🔴 Red      | Pulse, No battery / idle                                       |
+| 🔴 Red      | Puls, No battery / idle                                       |
 | 🔵 Blue     | Battery detected — identifying                                 |
 | 🟡 Yellow   | Unsupported battery type — skipping                            |
 | 🟣 Purple   | Writing omega lock frame to BMS                                |
@@ -86,6 +87,14 @@ Types 5 and 6 have their own dedicated voltage and temperature commands and are 
 
 ---
 
+## Cell Imbalance Warning
+
+After any scan, if the spread between the highest and lowest cell voltage is **0.300v or greater**, the LED will give a brief **orange blink every second** over the result colour — green if the battery unlocked successfully, red if it did not. This is a physical warning that software cannot fix.
+
+A large cell voltage spread almost always indicates a **broken balancing tab** — the small metal strip connecting the PCB to a cell group. The battery will continue locking itself until the tab is repaired.
+
+---
+
 ## Example Readout
 
 ![pc exe](Pictures/PC_exe.png)
@@ -115,7 +124,7 @@ Types 5 and 6 have their own dedicated voltage and temperature commands and are 
 
 ### ⚡ Cell Imbalance
 
-The `Cell diff` value is the spread between your highest and lowest cell voltage. Anything above **~0.050 V** is worth watching — it indicates the cells are drifting and may need balancing.
+The `Cell diff` value is the spread between your highest and lowest cell voltage. Anything above **~0.050v** is worth watching — it indicates the cells are drifting and may need balancing.
 
 ### 🔌 State of Charge (0–7 scale)
 
@@ -173,10 +182,10 @@ Hit `Enter` (or send `S`) over the serial monitor at any time to trigger a fresh
 
 | Board                   | PlatformIO env              | Notes                                  |
 |-------------------------|-----------------------------|----------------------------------------|
-| Arduino Uno             | `uno`                       | Pull-ups to 5 V — see below            |
-| Arduino Nano            | `nano`                      | Pull-ups to 5 V — see below            |
-| ESP32-C3 SuperMini      | `esp32-c3-devkitm-1`        | Pull-ups to 3.3 V only — see below     |
-| Waveshare RP2040 Zero   | `waveshare_rp2040_zero`     | Pull-ups to 3.3 V only — UF2 available |
+| Arduino Uno             | `uno`                       | Pull-ups to 5v — see below            |
+| Arduino Nano            | `nano`                      | Pull-ups to 5v — see below            |
+| ESP32-C3 SuperMini      | `esp32-c3-devkitm-1`        | Pull-ups to 3.3v only — see below     |
+| Waveshare RP2040 Zero   | `waveshare_rp2040_zero`     | Pull-ups to 3.3v only — UF2 available |
 
 ---
 
@@ -188,12 +197,12 @@ This is the standard 1-Wire pull-up value — lower values overdrive the bus and
 
 **Pull-up voltage depends on your board:**
 
-- **Arduino Uno / Nano** — pull up to **5 V**. The ATmega328P runs at 5 V and its logic HIGH threshold (~3.0 V) leaves almost no margin when pulling up to 3.3 V, causing unreliable reads. The battery's BMS data pin can tolerate 5 V in practice.
-- **ESP32-C3 / RP2040 Zero** — pull up 4.7 kΩ to **3.3 V only**. These are 3.3 V-native devices and 5 V on a GPIO will damage them. Also as precaution Connect the Bus enable and 1-Wire of your battery to your chip via 1k resistors to mitigate risk of a pin getting stuck high or low or blowing (It helps alot!). Make sure they are directly connected to the gpio pins and your battery Bus enable and 1-Wire pins!
+- **Arduino Uno / Nano** — pull up to **5v**. The ATmega328P runs at 5v and its logic HIGH threshold (~3.0v) leaves almost no margin when pulling up to 3.3v, causing unreliable reads. The battery's BMS data pin can tolerate 5v in practice.
+- **ESP32-C3 / RP2040 Zero** — pull up 4.7 kΩ to **3.3v only**. These are 3.3v-native devices and 5v on a GPIO will damage them. Also as precaution Connect the Bus enable and 1-Wire of your battery to your chip via 1k resistors to mitigate risk of a pin getting stuck high or low or blowing (It helps alot!). Make sure they are directly connected to the gpio pins and your battery Bus enable and 1-Wire pins!
 
 > **Optional** — A 1 kΩ load resistor may be required across the battery's main power terminals (B+ to B−), as some batteries enter a deep sleep state and will not respond on the 1-Wire bus until they detect current draw on the power terminals — toggling ENABLE alone is not sufficient to wake them. A 1 kΩ resistor draws enough current to reliably trigger BMS wake-up while remaining cool enough for a standard ¼ W or ½ W resistor. Values above ~1.5 kΩ have been found insufficient to wake some batteries. Plugging into a Makita charger or 2 pin device will also wake a battery from this state.
 
-> **Note** — A battery will accept charge from any DC power source in any state (deep sleep or error). Loading the battery with a 1 kΩ resistor then briefly grounding the enable pin should make any locked BMS wake up and output power without clearing errors, provided the battery is above ~8 V.
+> **Note** — A battery will accept charge from any DC power source in any state (deep sleep or error). Loading the battery with a 1 kΩ resistor then briefly grounding the enable pin should make any locked BMS wake up and output power without clearing errors, provided the battery is above ~8v.
 
 ### Pin Assignments
 
