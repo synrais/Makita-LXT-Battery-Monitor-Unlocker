@@ -30,7 +30,8 @@ Nybble 0: 0x1   (low nybble)
 Nybble 1: 0xF   (high nybble)
 Min/Max:  fixed 0xF1
 ```
-**SHOULD preserve**
+Type: Universal constant  
+Repair action: Leave unchanged
 
 ---
 
@@ -40,7 +41,8 @@ China/Murata:    0x26  (constant for all China batteries)
 Vietnam/Samsung: 0x36  (constant for all Vietnam batteries)
 Min/Max:         0x26 – 0x36
 ```
-**SHOULD preserve**
+Type: Variant constant  
+Repair action: Leave unchanged
 
 ---
 
@@ -50,7 +52,8 @@ China/Murata:    0xBD
 Vietnam/Samsung: 0xB6
 Min/Max:         0xB6 – 0xBD
 ```
-**SHOULD preserve**
+Type: Variant constant  
+Repair action: Leave unchanged
 
 ---
 
@@ -63,8 +66,9 @@ Min/Max:         0x13 – 0xC3
 Nybble 6 (low):  0x3  — same on both variants
 Nybble 7 (high): 0x1 (China) / 0xC (Vietnam)
 ```
-**SHOULD preserve**
-Nybble 7 varies by variant 
+Type: Variant constant  
+Repair action: Leave unchanged  
+Note: Nybble 7 varies by variant.
 
 ---
 
@@ -74,7 +78,8 @@ China/Murata:    0x14
 Vietnam/Samsung: 0x18
 Min/Max:         0x14 – 0x18
 ```
-**SHOULD preserve** 
+Type: Variant constant  
+Repair action: Leave unchanged
 
 ---
 
@@ -83,8 +88,9 @@ Min/Max:         0x14 – 0x18
 Value:   0x58  (constant — all new-family batteries)
 Min/Max: fixed 0x58
 ```
+Type: Universal constant  
 Purpose unknown. Constant across every battery tested regardless of model or variant.  
-Leave unchanged during repair.
+Repair action: Leave unchanged
 
 ---
 
@@ -93,7 +99,9 @@ Leave unchanged during repair.
 Value:   0x00  (constant — all new-family batteries)
 Min/Max: fixed 0x00
 ```
-Purpose unknown. Always zero.
+Type: Universal constant  
+Purpose unknown. Always zero.  
+Repair action: Leave unchanged
 
 ---
 
@@ -102,17 +110,21 @@ Purpose unknown. Always zero.
 Value:   0x00  (constant — all new-family batteries)
 Min/Max: fixed 0x00
 ```
-Purpose unknown. Always zero.
+Type: Universal constant  
+Purpose unknown. Always zero.  
+Repair action: Leave unchanged
 
 ---
 
-### Bytes 8–9 — Unknown / Possibly BMS State
+### Bytes 8–9 — Unknown / BMS State
 ```
 Values seen:  0x04 – 0xF3 (wide range, both bytes always equal)
 Both bytes always match each other (e.g. B1 B1, D2 D2, 94 94)
 ```
-**SHOULD preserve** Purpose unknown. Both bytes are always identical to each other.  
+Type: Unknown / BMS state  
+Purpose unknown. Both bytes are always identical to each other.  
 Appears to relate to battery charge state or BMS internal status.  
+Repair action: Leave unchanged
 
 ---
 
@@ -121,8 +133,9 @@ Appears to relate to battery charge state or BMS internal status.
 Value:   0x40  (constant — all new-family batteries)
 Min/Max: fixed 0x40
 ```
+Type: Universal constant  
 Purpose unknown. Constant across every battery tested.  
-Leave unchanged during repair.
+Repair action: Leave unchanged
 
 ---
 
@@ -137,7 +150,8 @@ Decoded value:
   13–29 = 5-cell BL18xx (value 18 common on BL18xx)
   30 = 10-cell BL36xx
 ```
-Variant constant — varies by model family. Leave unchanged during repair.
+Type: Battery type  
+Repair action: Leave unchanged
 
 ---
 
@@ -147,7 +161,8 @@ China/Murata:    0xD0
 Vietnam/Samsung: 0x01
 Min/Max:         0x01 – 0xD0
 ```
-**SHOULD preserve**
+Type: Variant constant  
+Repair action: Leave unchanged
 
 ---
 
@@ -158,8 +173,9 @@ Nybble 26 (low):  0x0
 Nybble 27 (high): 0x8
 Min/Max:  fixed 0x80
 ```
+Type: Universal constant  
 Purpose unknown. Constant across every battery tested.  
-Leave unchanged during repair.
+Repair action: Leave unchanged
 
 ---
 
@@ -168,8 +184,9 @@ Leave unchanged during repair.
 Value:   0x02  (constant — all new-family batteries)
 Min/Max: fixed 0x02
 ```
+Type: Universal constant  
 Purpose unknown. Constant across every battery tested.  
-Leave unchanged during repair.
+Repair action: Leave unchanged
 
 ---
 
@@ -179,10 +196,12 @@ Values seen: 0x0C – 0x7E
 Nybble 30 (low):  lower nybble of capacity encoding
 Nybble 31 (high): upper nybble of capacity encoding
 ```
-**SHOULD preserve** This byte works together with byte 16 to encode capacity.  
+Type: Variable  
+This byte works together with byte 16 to encode capacity.  
 The capacity field is nybble_pair(32,33) which spans bytes 15–16 (high nybbles of 15, low nybble of 16... see byte 16).  
 Variable — depends on battery model and specific pack capacity.  
-Encodes actual battery capacity, cannot be guessed.
+Encodes actual battery capacity, cannot be guessed.  
+Repair action: Leave unchanged
 
 ---
 
@@ -199,7 +218,9 @@ Nybble 33 (high): low digit of capacity
 Capacity = (nybble32 << 4) | nybble33
 Capacity in 1/10 Ah — divide by 10 for Ah value
 ```
-**SHOULD preserve** Encodes actual battery capacity, cannot be guessed.
+Type: Variable  
+Encodes actual battery capacity, cannot be guessed.  
+Repair action: Leave unchanged
 
 ---
 
@@ -210,12 +231,12 @@ Nybble 34 (low):  0x0  — charger lock nybble
 Nybble 35 (high): 0xD  — unknown purpose
 Min/Max:  fixed 0xD0
 ```
-Nybble 34 stops the battery **Will stop charging** if non-zero — charger-validated.
+Nybble 34 stops the battery — **Will stop charging** if non-zero — charger-validated.  
 Present in ALL Makita LXT batteries — old and new family — for charger compatibility.  
 Per OBI author Jansson: *"The earliest batteries were locked by the charger setting a  
 certain nybble to a non-zero value. This is still present in all newer batteries."*  
-This is that nybble. 
-During repair: zero nybble 34, preserve nybble 35 — `frame[17] = frame[17] & 0xF0`.
+This is that nybble.  
+Repair action: Zero nybble 34, preserve nybble 35 — `frame[17] = frame[17] & 0xF0` — **charger-validated**
 
 ---
 
@@ -224,8 +245,9 @@ During repair: zero nybble 34, preserve nybble 35 — `frame[17] = frame[17] & 0
 Value:   0x8E  (constant — all new-family batteries)
 Min/Max: fixed 0x8E
 ```
+Type: Universal constant  
 Purpose unknown. Constant across every battery tested.  
-Leave unchanged during repair.
+Repair action: Leave unchanged
 
 ---
 
@@ -241,7 +263,9 @@ Min/Max:         0x1B – 0xA5
 Nybble 38 (low):  varies
 Nybble 39 (high): varies
 ```
-**SHOULD preserve** Fixed at manufacture — identifies factory and cell supplier.  
+Type: Variable  
+Fixed at manufacture — identifies factory and cell supplier.  
+Repair action: Leave unchanged
 
 ---
 
@@ -257,9 +281,10 @@ Nybble 41 (high): Checksum CS0 = sum(nybbles 0–15) & 0x0F
 Failure code min: 0x0 (OK)
 Failure code max: 0xF (dead)
 ```
-**SHOULD preserve** Nybble 40 is informational only.
-Bad CS0 (nybble 41) **Will stop charging** — charger-validated.
-Recalculate CS0 (nybble 41) after any frame change.
+Type: Variable  
+Nybble 40 is informational only.  
+Bad CS0 (nybble 41) **Will stop charging** — charger-validated.  
+Repair action: Recalculate CS0 (nybble 41) after any frame change — **charger-validated**
 
 ---
 
@@ -268,8 +293,9 @@ Recalculate CS0 (nybble 41) after any frame change.
 Nybble 42 (low):  Checksum CS1 = sum(nybbles 16–31) & 0x0F
 Nybble 43 (high): Checksum CS2 = sum(nybbles 32–40) & 0x0F
 ```
-Recalculate CS2 (nybble 43) after any frame change.
-Bad CS2 (nybble 43) **Will stop charging** — charger-validated.
+Type: Variable  
+Bad CS2 (nybble 43) **Will stop charging** — charger-validated.  
+Repair action: Recalculate CS2 (nybble 43) after any frame change — **charger-validated**
 
 ---
 
@@ -280,10 +306,11 @@ Min/Max: 0x00 (healthy) — non-zero set by BMS if cell failure detected
 Nybble 44 (low):  bit 2 = cell failure flag
 Nybble 45 (high): 0x0 on all batteries tested
 ```
+Type: BMS-managed cell failure flag (bit 2)  
 BMS-managed cell failure register. `0x00` on all healthy batteries.  
 [WARNING] Writing byte 22 = `0xFF` (nybble 44 = 0xF) caused the BMS to go bus-silent  
 during testing — BMS did not respond until power cycle. Avoid high values.  
-Leave unchanged during repair.
+Repair action: Leave unchanged — **Note: BMS corrects bit 2 on boot**
 
 ---
 
@@ -294,10 +321,11 @@ Nybble 46 (low):  damage rating bits 1-3 (valid range 0–7)
 Nybble 47 (high): unknown
 Min/Max:          0x01 – 0x83
 ```
-DOC: Damage rating used by charger to calculate 0–4 health score.  
+Type: Variable  
+Damage rating used by charger to calculate 0–4 health score.  
 A rating below 3 = 4/4 health, 7 = 0/4 health.  
-BMS-written. **SHOULD preserve** — leave unchanged.  
-Safe to reset nybble 46 to `0` (4/4 health) if value is clearly corrupt (e.g. outside 0–7 range).
+BMS-written.  
+Repair action: Leave unchanged. Safe to reset nybble 46 to `0` (4/4 health) only if value is clearly corrupt (e.g. outside 0–7 range).
 
 ---
 
@@ -308,8 +336,9 @@ Nybble 48 (low):  overdischarge count high nybble
 Nybble 49 (high): overdischarge count low nybble
 Min/Max:          0x02 – 0xF2 (0x00 when no OD events)
 ```
+Type: Variable  
 BMS-written. Counts overdischarge events.  
-**SHOULD preserve** — real battery history. Safe to zero out only if value is clearly corrupt (e.g. 0xFF with no corresponding history).
+Repair action: Leave unchanged — real battery history. Safe to zero out only if value is clearly corrupt (e.g. 0xFF with no corresponding history).
 
 ---
 
@@ -320,8 +349,9 @@ Nybble 50 (low):  overload count high nybble
 Nybble 51 (high): overload count low nybble
 Min/Max:          0x00 – 0x22
 ```
+Type: Variable  
 BMS-written. Counts overload events.  
-**SHOULD preserve** — real battery history. Safe to zero out only if value is clearly corrupt.
+Repair action: Leave unchanged — real battery history. Safe to zero out only if value is clearly corrupt.
 
 ---
 
@@ -332,9 +362,11 @@ Nybble 52 (low):  bit 0 = cycle count bit 12
 Nybble 53 (high): cycle count bits 8–11
 Min/Max:          0x0E – 0x2E
 ```
+Type: Variable  
 Part of the 13-bit cycle count field.  
 Full decode: `((N52 & 1) << 12) | (N53 << 8) | (N54 << 4) | N55`  
-**SHOULD preserve** — real battery history.  
+BMS-written.  
+Repair action: Leave unchanged — real battery history.
 
 ---
 
@@ -345,8 +377,9 @@ Nybble 54 (low):  cycle count bits 4–7
 Nybble 55 (high): cycle count bits 0–3
 Min/Max:          0x00 – 0xD4
 ```
+Type: Variable  
 Part of the 13-bit cycle count. BMS-written.  
-**SHOULD preserve** — see byte 26.
+Repair action: Leave unchanged — real battery history. See byte 26.
 
 ---
 
@@ -355,8 +388,9 @@ Part of the 13-bit cycle count. BMS-written.
 Values seen: 0x00 – 0x10
 Min/Max:     0x00 – 0x10
 ```
+Type: Unknown runtime data  
 Purpose unknown. Varies per battery. BMS accepts all values (tested).  
-**SHOULD preserve** — purpose unknown, leave unchanged.
+Repair action: Leave unchanged
 
 ---
 
@@ -365,8 +399,9 @@ Purpose unknown. Varies per battery. BMS accepts all values (tested).
 Values seen: 0x00 – 0xF6  (wide range)
 Min/Max:     0x00 – 0xF6
 ```
+Type: Unknown runtime data  
 Purpose unknown. Varies significantly per battery. BMS accepts all values (tested).  
-**SHOULD preserve** — purpose unknown, leave unchanged.
+Repair action: Leave unchanged
 
 ---
 
@@ -375,9 +410,10 @@ Purpose unknown. Varies significantly per battery. BMS accepts all values (teste
 Values seen: 0x00 (15 batteries), 0x01–0x04 (5 batteries)
 Min/Max:     0x00 – 0x04
 ```
+Type: Unknown runtime data  
 Mostly zero. Non-zero values seen on healthy batteries — not a fault indicator.  
 Charger confirmed does NOT validate this byte. BMS accepts all values (tested).  
-**SHOULD preserve** — purpose unknown, leave unchanged.
+Repair action: Leave unchanged
 
 ---
 
@@ -387,7 +423,9 @@ Values seen: 0x0B – 0xF5  (derived from data)
 Nybble 62 (low):  AUX Checksum 0 = sum(nybbles 44–47) & 0x0F
 Nybble 63 (high): AUX Checksum 1 = sum(nybbles 48–61) & 0x0F
 ```
-AUX checksums do NOT affect lock state — mismatch does not lock the battery.
+Type: Variable  
+AUX checksums do NOT affect lock state — mismatch does not lock the battery.  
+Repair action: Leave unchanged
 
 ---
 
