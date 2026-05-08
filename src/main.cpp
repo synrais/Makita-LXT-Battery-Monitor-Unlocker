@@ -120,15 +120,11 @@ static constexpr uint16_t IMBALANCE_BLINK_ON_MS       = 80;    // blink duration
 static constexpr uint32_t WATCHDOG_TIMEOUT_MS = 12000;
 
 // ─── Lock cause flags (bitfield) ─────────────────────────────
-// Each bit represents one confirmed cause of a battery not charging.
-static constexpr uint16_t LF_FC   = 0x0001;  // nybble 40 (failure code) != 0
+// Confirmed by systematic charger validation testing (193 fields tested).
+// Only these three are actually validated by the charger.
 static constexpr uint16_t LF_CS0  = 0x0002;  // CS0 mismatch (nybbles 0-15)
-static constexpr uint16_t LF_CS1  = 0x0004;  // CS1 mismatch (nybbles 16-31)
 static constexpr uint16_t LF_CS2  = 0x0008;  // CS2 mismatch (nybbles 32-40)
-static constexpr uint16_t LF_B1   = 0x0020;  // byte 1 invalid (not 0x26, 0x36, or 0x31)
 static constexpr uint16_t LF_N34  = 0x0040;  // nybble 34 != 0 (charger lock nybble)
-static constexpr uint16_t LF_B18  = 0x0080;  // byte 18 == 0x00 (must not be zero)
-static constexpr uint16_t LF_B19  = 0x0100;  // byte 19 == 0x00 (must not be zero)
 
 // ─── Return codes / types ─────────────────────────────────────
 enum BasicInfoResult { BASIC_INFO_NO_RESPONSE = 0, BASIC_INFO_OK = 1, BASIC_INFO_PRE_TYPE0 = -1 };
@@ -401,11 +397,11 @@ static void print_checksums(bool ok0, bool ok1, bool ok2) {
 
 static void print_failure_code(uint8_t fc) {
     switch (fc) {
-        case FC_OK:         Serial.println(F("0 - OK")); break;
-        case FC_OVERLOADED: Serial.println(F("1 - Overloaded")); break;
-        case FC_WARNING:    Serial.println(F("5 - Warning")); break;
-        case FC_DEAD:       Serial.println(F("15 - Dead?")); break;
-        default: Serial.print(fc); Serial.println(F(" - Invalid Error Code")); break;
+        case FC_OK:         Serial.println(F("OK (0)")); break;
+        case FC_OVERLOADED: Serial.println(F("BAD - Overloaded (1)")); break;
+        case FC_WARNING:    Serial.println(F("BAD - Warning (5)")); break;
+        case FC_DEAD:       Serial.println(F("BAD - Dead (15)")); break;
+        default: Serial.print(F("BAD - Unknown (")); Serial.print(fc); Serial.println(')'); break;
     }
 }
 
@@ -415,23 +411,12 @@ static void print_lock_causes(const BatteryInfo &info, const uint8_t d[BASIC_INF
     if (info.lock_causes == 0) return;
     Serial.println(F("Lock causes    :"));
     char buf[48];
-    if (info.lock_causes & LF_FC) {
-        snprintf(buf, sizeof(buf), "  Nybble 40 = %u      (must be 0)", info.raw.failure_code);
-        Serial.println(buf);
-    }
-    if (info.lock_causes & LF_CS0) Serial.println(F("  CS0              (mismatch nybbles 0-15)"));
-    if (info.lock_causes & LF_CS1) Serial.println(F("  CS1              (mismatch nybbles 16-31)"));
-    if (info.lock_causes & LF_CS2) Serial.println(F("  CS2              (mismatch nybbles 32-40)"));
-    if (info.lock_causes & LF_B1) {
-        snprintf(buf, sizeof(buf), "  Byte 1 = 0x%02X    (invalid variant)", d[1]);
-        Serial.println(buf);
-    }
+    if (info.lock_causes & LF_CS0) Serial.println(F("  CS0 mismatch     (nybbles 0-15)"));
+    if (info.lock_causes & LF_CS2) Serial.println(F("  CS2 mismatch     (nybbles 32-40)"));
     if (info.lock_causes & LF_N34) {
-        snprintf(buf, sizeof(buf), "  Byte 17 = 0x%02X   (must be 0xD0)", d[17]);
+        snprintf(buf, sizeof(buf), "  Nybble 34 = 0x%X  (must be 0)", nybble_get(d, 34));
         Serial.println(buf);
     }
-    if (info.lock_causes & LF_B18) Serial.println(F("  Byte 18 = 0x00   (must not be zero)"));
-    if (info.lock_causes & LF_B19) Serial.println(F("  Byte 19 = 0x00   (must not be zero)"));
 }
 
 static void print_frame(const uint8_t d[BASIC_INFO_LEN],
@@ -632,14 +617,9 @@ static void derive_battery_info(const uint8_t d[BASIC_INFO_LEN], BatteryInfo &in
 
     // Build lock cause bitfield — every known cause of a battery not charging
     info.lock_causes = 0;
-    if (r.failure_code != 0)                                          info.lock_causes |= LF_FC;
     if (!info.checksums_ok[0])                                        info.lock_causes |= LF_CS0;
-    if (!info.checksums_ok[1])                                        info.lock_causes |= LF_CS1;
     if (!info.checksums_ok[2])                                        info.lock_causes |= LF_CS2;
-    if (d[1] != 0x26 && d[1] != 0x36 && d[1] != 0x31)               info.lock_causes |= LF_B1;
     if (nybble_get(d, 34) != 0)                                       info.lock_causes |= LF_N34;
-    if (d[18] == 0x00)                                                info.lock_causes |= LF_B18;
-    if (d[19] == 0x00)                                                info.lock_causes |= LF_B19;
 
     info.locked = (info.lock_causes != 0);
 }
@@ -852,24 +832,21 @@ static void print_report(const BatteryInfo &info, const VoltageReadResult &vr,
     print_sep();
     Serial.print(F("Lock status    : ")); Serial.println(info.locked ? F("LOCKED") : F("UNLOCKED"));
     Serial.print(F("Cell failure   : ")); Serial.println(info.raw.cell_failure ? F("YES") : F("No"));
-    Serial.print(F("Nybble 40 code : ")); print_failure_code(info.raw.failure_code);
     Serial.print(F("Checksum 0-15  : ")); Serial.println(info.checksums_ok[0] ? F("OK") : F("BAD"));
     Serial.print(F("Checksum 16-31 : ")); Serial.println(info.checksums_ok[1] ? F("OK") : F("BAD"));
     Serial.print(F("Checksum 32-40 : ")); Serial.println(info.checksums_ok[2] ? F("OK") : F("BAD"));
     Serial.print(F("Aux CSum 44-47 : ")); Serial.println(info.aux_checksums_ok[0] ? F("OK") : F("BAD"));
     Serial.print(F("Aux CSum 48-61 : ")); Serial.println(info.aux_checksums_ok[1] ? F("OK") : F("BAD"));
     { char buf[64];
-      if (d[1]==0x26) Serial.println(F("Byte 1  origin : OK (China/Murata)"));
-	  else if (d[1]==0x36) Serial.println(F("Byte 1  origin : OK (Vietnam/Samsung)"));
-	  else if (d[1]!=0x00) { snprintf(buf,sizeof(buf),"Byte 1  origin : OK - Unknown (0x%02X)",d[1]); Serial.println(buf); }
-      else { snprintf(buf,sizeof(buf),"Byte 1  origin : BAD (0x%02X, must be 0x26/0x36/0x31)",d[1]); Serial.println(buf); }
+      if (d[1]==0x26)      Serial.println(F("Byte 1  origin : China/Murata (26)"));
+      else if (d[1]==0x36) Serial.println(F("Byte 1  origin : Vietnam/Samsung (36)"));
+      else if (d[1]==0x31) Serial.println(F("Byte 1  origin : Old family (31)"));
+      else { snprintf(buf,sizeof(buf),"Byte 1  origin : Unknown (%02X)",d[1]); Serial.println(buf); }
       uint8_t n34=nybble_get(d,34);
-      if (n34==0) Serial.println(F("Byte 17 lock   : OK"));
-      else { snprintf(buf,sizeof(buf),"Byte 17 lock   : BAD (0x%02X, low nybble must be 0)",d[17]); Serial.println(buf); }
-      if (d[18]!=0x00) Serial.println(F("Byte 18 ???    : OK"));
-      else Serial.println(F("Byte 18 ???    : BAD (0x00, must not be 0)"));
-      if (d[19]!=0x00) { snprintf(buf,sizeof(buf),"Byte 19 status : OK (%02X)",d[19]); Serial.println(buf); }
-      else Serial.println(F("Byte 19 status : BAD (0x00, must not be 0)")); }
+      if (n34==0) Serial.println(F("Nybble 34 lock : OK"));
+      else { snprintf(buf,sizeof(buf),"Nybble 34 lock : BAD (%X, must be 0)",n34); Serial.println(buf); }
+      snprintf(buf,sizeof(buf),"Byte 19 status : (%02X)",d[19]); Serial.println(buf);
+      Serial.print(F("Nybble 40 code : ")); print_failure_code(info.raw.failure_code); }
     if (info.locked) print_lock_causes(info, d);
 
     print_sep();
@@ -986,26 +963,6 @@ static bool do_protected_write(const uint8_t frame[BASIC_INFO_LEN],
     return true;
 }
 
-// Derive correct status code (byte 19) from variant and capacity.
-// Used when byte 19 is corrupt (0x00 or 0xA5 with no real cell fault).
-static uint8_t derive_status_code(uint8_t byte1, uint8_t capacity) {
-    if (byte1 == 0x36) return 0x1B;           // Vietnam → BL1850B Samsung
-    // China variant — derive from capacity
-    if (capacity >= 58) return 0x67;           // BL1860B
-    if (capacity >= 48) return 0x45;           // BL1850B
-    return 0x67;                               // BL1830B and others
-}
-
-// Infer variant byte 1 from the other variant bytes when byte 1 is corrupt.
-static uint8_t infer_byte1(const uint8_t d[BASIC_INFO_LEN]) {
-    uint8_t china_score = 0, viet_score = 0;
-    if (d[2]  == 0xBD) china_score++; else if (d[2]  == 0xB6) viet_score++;
-    if (d[3]  == 0x13) china_score++; else if (d[3]  == 0xC3) viet_score++;
-    if (d[4]  == 0x14) china_score++; else if (d[4]  == 0x18) viet_score++;
-    if (d[12] == 0xD0) china_score++; else if (d[12] == 0x01) viet_score++;
-    return (viet_score > china_score) ? 0x36 : 0x26;
-}
-
 // Send DA04 error register clear. Call after a successful frame write.
 static void send_da04() {
     power_cycle_bus();
@@ -1017,29 +974,17 @@ static void send_da04() {
     power_cycle_bus();
 }
 
-// Comprehensive frame repair. Fixes all known lock causes while preserving
-// all salvageable battery-specific data (history, variant identity, capacity).
+// Frame repair — sets nybble 34 = 0 and recalculates checksums.
+// Confirmed by testing: only nybble 34, CS0, and CS2 are charger-validated.
+// All other frame data is left untouched.
 static bool repair_frame(uint8_t data32[BASIC_INFO_LEN]) {
     uint8_t frame[BASIC_INFO_LEN];
     memcpy(frame, data32, BASIC_INFO_LEN);
 
-    if (frame[0] == 0x00) frame[0] = 0xF1;
-    frame[5]  = 0x58;
-    frame[6]  = 0x00;
-    frame[7]  = 0x00;
-    frame[10] = 0x40;
-    frame[11] = 0x21;
-    frame[13] = 0x80;
-    frame[14] = 0x02;
-    frame[22] = 0x00;
-    frame[17] = 0xD0;
-    if (frame[18] == 0x00) frame[18] = 0x8E;
-    if (frame[1] != 0x26 && frame[1] != 0x36)
-        frame[1] = infer_byte1(data32);
-    bool b19_corrupt = (frame[19] == 0x00) || (frame[19] == 0xA5);
-    if (b19_corrupt)
-        frame[19] = derive_status_code(frame[1], data32[16]);
-    nybble_set(frame, 40, 0);
+    // Set nybble 34 = 0 — the only charger lock nybble (byte 17 high nybble preserved)
+    frame[17] = (frame[17] & 0xF0) | 0x00;
+
+    // Recalculate all checksums
     nybble_set(frame, 41, checksum_calc(frame,  0, 15));
     nybble_set(frame, 42, checksum_calc(frame, 16, 31));
     nybble_set(frame, 43, checksum_calc(frame, 32, 40));
@@ -1059,10 +1004,9 @@ static bool repair_frame(uint8_t data32[BASIC_INFO_LEN]) {
     bool ok0 = (checksum_calc(verify,  0, 15) == nybble_get(verify, 41));
     bool ok1 = (checksum_calc(verify, 16, 31) == nybble_get(verify, 42));
     bool ok2 = (checksum_calc(verify, 32, 40) == nybble_get(verify, 43));
-    bool lk  = (verify[20] & 0x0F) != 0;
     Serial.print(F("  Checksums : ")); print_checksums(ok0, ok1, ok2);
 
-    if (ok0 && ok1 && ok2 && !lk) {
+    if (ok0 && ok2 && nybble_get(verify, 34) == 0) {
         // Send DA04 to clear internal error register so battery charges on first insert
         Serial.println(F("  DA04 clear..."));
         send_da04();
@@ -1211,8 +1155,8 @@ static void step_handle_lock(BatteryInfo &info, uint8_t d[BASIC_INFO_LEN]) {
 // ═══════════════════════════════════════════════════════════════
 
 static void omega_mutate(uint8_t v[BASIC_INFO_LEN]) {
-    // Set nybble 34 = 4, preserve nybble 35 = D → byte 17 = 0xD4
-    v[17] = 0xD4;
+    // Set nybble 34 = 4, preserve nybble 35 (high nybble of byte 17)
+    v[17] = (v[17] & 0xF0) | 0x04;
     // Recalculate CS2 (covers nybbles 32-40, includes byte 17)
     nybble_set(v, 43, checksum_calc(v, 32, 40));
 }
