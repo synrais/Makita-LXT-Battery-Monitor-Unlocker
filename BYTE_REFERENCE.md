@@ -113,7 +113,6 @@ Both bytes always match each other (e.g. B1 B1, D2 D2, 94 94)
 ```
 **SHOULD preserve** Purpose unknown. Both bytes are always identical to each other.  
 Appears to relate to battery charge state or BMS internal status.  
-**MUST preserve** from existing frame — do not write specific values here.
 
 ---
 
@@ -159,8 +158,7 @@ Nybble 26 (low):  0x0
 Nybble 27 (high): 0x8
 Min/Max:  fixed 0x80
 ```
-Constant across every battery tested.
-**[CONFIRMED]** Nybble 27 is NOT charger-validated — tested with value `9`, charger accepted.  
+Purpose unknown. Constant across every battery tested.  
 Leave unchanged during repair.
 
 ---
@@ -212,11 +210,12 @@ Nybble 34 (low):  0x0  — charger lock nybble
 Nybble 35 (high): 0xD  — unknown purpose
 Min/Max:  fixed 0xD0
 ```
-**[CONFIRMED]** Nybble 34 stops the battery from charging if non-zero.  
+Nybble 34 stops the battery from charging if non-zero — charger-validated.
 Present in ALL Makita LXT batteries — old and new family — for charger compatibility.  
 Per OBI author Jansson: *"The earliest batteries were locked by the charger setting a  
 certain nybble to a non-zero value. This is still present in all newer batteries."*  
-This is that nybble. During repair: zero nybble 34, preserve nybble 35 — `frame[17] = frame[17] & 0xF0`.
+This is that nybble. 
+During repair: zero nybble 34, preserve nybble 35 — `frame[17] = frame[17] & 0xF0`.
 
 ---
 
@@ -226,7 +225,6 @@ Value:   0x8E  (constant — all new-family batteries)
 Min/Max: fixed 0x8E
 ```
 Purpose unknown. Constant across every battery tested.  
-**[CONFIRMED]** NOT charger-validated — tested 0x00 and 0xFF, both accepted.  
 Leave unchanged during repair.
 
 ---
@@ -244,7 +242,6 @@ Nybble 38 (low):  varies
 Nybble 39 (high): varies
 ```
 **SHOULD preserve** Fixed at manufacture — identifies factory and cell supplier.  
-**[CONFIRMED]** NOT charger-validated — tested 0x00, 0xFF, 0xA5, all accepted.
 
 ---
 
@@ -260,10 +257,9 @@ Nybble 41 (high): Checksum CS0 = sum(nybbles 0–15) & 0x0F
 Failure code min: 0x0 (OK)
 Failure code max: 0xF (dead)
 ```
-**[CONFIRMED]** FC does NOT stop charging — tested FC=15, charger accepted.  
-FC is BMS bookkeeping only. When a battery naturally locks from overload/overdischarge,  
-the BMS also corrupts the checksums — the bad checksums stop charging, not the FC value.  
-Nybble 40 is informational only. Recalculate CS0 (nybble 41) after any frame change.
+**SHOULD preserve** Nybble 40 is informational only.
+Bad CS0 (nybble 41) DOES stop charging — charger-validated.
+Recalculate CS0 (nybble 41) after any frame change.
 
 ---
 
@@ -272,8 +268,8 @@ Nybble 40 is informational only. Recalculate CS0 (nybble 41) after any frame cha
 Nybble 42 (low):  Checksum CS1 = sum(nybbles 16–31) & 0x0F
 Nybble 43 (high): Checksum CS2 = sum(nybbles 32–40) & 0x0F
 ```
-**[CONFIRMED]** CS1 (nybble 42) does NOT stop charging — tested bad CS1, charger accepted.  
-CS2 (nybble 43) DOES stop charging — charger-validated.
+Recalculate CS2 (nybble 43) after any frame change.
+Bad CS2 (nybble 43) DOES stop charging — charger-validated.
 
 ---
 
