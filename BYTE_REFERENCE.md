@@ -68,7 +68,6 @@ Nybble 7 (high): 0x1 (China) / 0xC (Vietnam)
 ```
 Type: Variant constant  
 Repair action: Leave unchanged  
-Note: Nybble 7 varies by variant.
 
 ---
 
