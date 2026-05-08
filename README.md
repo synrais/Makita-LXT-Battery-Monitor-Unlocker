@@ -206,7 +206,6 @@ This is the standard 1-Wire pull-up value — lower values overdrive the bus and
 |--------------|------------|--------------------|-------------|
 | 1-Wire data  | 6          | 1                  | 6           |
 | Bus enable   | 8          | 0                  | 8           |
-| NeoPixel     | —          | —                  | 16          |
 
 ESP32-C3 pin assignments can be overridden in `platformio.ini` via `ESP_EN_PIN` and `ESP_OW_PIN` build flags if your wiring differs from the SuperMini layout.
 
