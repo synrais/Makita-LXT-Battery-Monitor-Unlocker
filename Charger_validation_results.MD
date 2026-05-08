@@ -120,7 +120,7 @@ garbage frames all charged successfully with only these three conditions met.
 | 40 | Failure code (FC) | ✅ | ✅ | |
 | **41** | **CS0** | ❌ | ❌ | **Charger-validated — mismatch locks battery** |
 | 42 | CS1 | ✅ | ✅ | |
-| **43** | **CS2** | ❌ | ✅ | **Charger-validated — 0x0 wrong, 0xF was original value** |
+| **43** | **CS2** | ❌ | ❌ | **Charger-validated — mismatch locks battery** |
 | 44 | Cell failure flag | ✅ | ⚠️ | BMS went bus-silent on 0xF — recovered on retry, then ✅ |
 | 45 | Unknown | ✅ | ✅ | |
 | 46 | Damage rating | ✅ | ✅ | |
