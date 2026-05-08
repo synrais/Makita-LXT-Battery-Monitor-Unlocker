@@ -63,8 +63,8 @@ These are set at the factory and should **never be changed by frame repair**.
 | `26 BD` | `D0` | `45` / `67` | China | Murata | LIPW014/015/017 |
 | `36 B6` | `01` | `1B` / `A5` | Vietnam | Samsung | Unknown |
 
-The charger accepts **both variants** — this is informational only.  
-Frame repair must read bytes 1-2 and byte 12 from the existing frame and write them back unchanged.
+The charger accepts **both variants** and does not validate any of these bytes.  
+Frame repair leaves all variant bytes untouched — they are not modified during repair.
 
 ---
 
@@ -98,7 +98,6 @@ Byte  Nybbles   Field
   0    0–1      INFORMATIONAL ONLY — NOT modified during repair
                 New family = 0xF1, Old family = 0x50
                 Byte 0 has no bearing on charging state.
-                [CONFIRMED] NOT charger-validated — charger accepted 0x02.
                 Never overwritten during repair.
 
   1    2–3      MANUFACTURING VARIANT — DO NOT OVERWRITE
@@ -127,10 +126,10 @@ Byte  Nybbles   Field
                 after full physical battery power cycle in testing.
                 Leave unchanged during repair.
 
- 10   20–21     CONFIRMED CONSTANT: byte 10 = 0x40, byte 11 = 0x21 across all new-family batteries
+ 10   20–21     CONFIRMED CONSTANT: byte 10 = 0x40 across all new-family batteries
 
- 11   22–23     DOC: Battery type (8-bit integer)
-                Nybble 22 = high byte, nybble 23 = low byte
+ 11   22–23     DOC: Battery type (8-bit integer) — varies by model
+                Nybble 22 = high nybble, nybble 23 = low nybble
                 Decoded value:
                   < 13 = 4-cell BL14xx
                   13–29 = 5-cell BL18xx (value 18 common on BL18xx)
@@ -142,9 +141,7 @@ Byte  Nybbles   Field
 
  13   26–27     CONFIRMED CONSTANT: byte 13 = 0x80 across all new-family batteries
                 Nybble 26 = 0, Nybble 27 = 8
-                [CONFIRMED] Nybble 27 NOT charger-validated — charger accepted value 9.
-                Writing wrong value (9) did cause FC3 and checksum corruption in BMS.
-                Set to 0x80 during repair.
+                Leave unchanged during repair.
 
  14   28–29     CONFIRMED CONSTANT: byte 14 = 0x02 across all new-family batteries
 
@@ -156,34 +153,31 @@ Byte  Nybbles   Field
                 BL1850B ≈ 50-52, BL1860B = 60
 
  17   34–35     THE ORIGINAL MAKITA CHARGER LOCK NYBBLE
-                Byte 17 = 0xD0 — confirmed constant across all batteries tested.
+                Byte 17 = 0xD0 — constant across all batteries tested.
                 Nybble 34 = 0  (low nybble) — present in ALL Makita LXT batteries
                 Nybble 35 = D  (high nybble) — unknown purpose
                 Any non-zero nybble 34 stops the battery from charging.
                 Per Jansson: the original lock mechanism from the earliest protocol,
                 carried forward in every subsequent battery for charger compatibility.
-                During repair: zero nybble 34, preserve nybble 35 — `frame[17] = frame[17] & 0xF0`.
+                Set byte 17 to 0xD0 during repair. — charger-validated.
 
  18   36–37     CONFIRMED CONSTANT: byte 18 = 0x8E across all new-family batteries
                 DOC: "Some 16-bit value, must not be zero" — unknown purpose
 
  19   38–39     DOC: "Some 16-bit value, must not be zero"
-                CONFIRMED: This is the status code (byte 19 in OBI).
+                This is the status code.
                 Fixed at manufacture — identifies factory/cell variant.
                 MANUFACTURING VARIANT — DO NOT OVERWRITE
-                See Section 4 for values.
 
- 20   40–41     CRITICAL LOCK FIELD
-                Nybble 40 = Failure code:
-                  0  = OK — battery unlocked
+ 20   40–41     Nybble 40 = Failure code
+                  0  = OK
                   1  = Overloaded
                   5  = Warning
-                  15 = Dead (FC_DEAD) — BMS dead, unlock still attempted
-                Any non-zero value = battery LOCKED
-                Nybble 41 = Checksum CS0 (sum of nybbles 0–15 & 0x0F)
+                  15 = Dead (FC_DEAD)
+                Nybble 41 = Checksum CS0 (sum of nybbles 0–15 & 0x0F) — charger-validated.
 
  21   42–43     Nybble 42 = Checksum CS1 (sum of nybbles 16–31 & 0x0F)
-                Nybble 43 = Checksum CS2 (sum of nybbles 32–40 & 0x0F)
+                Nybble 43 = Checksum CS2 (sum of nybbles 32–40 & 0x0F) — charger-validated.
 
  22   44–45     DOC: Nybble 44 bit 2 = cell failure flag (1 = failed)
                 Nybble 45 = UNKNOWN (BMS accepts all values, charger validation unknown)
@@ -210,8 +204,6 @@ Byte  Nybbles   Field
  29   58–59     UNKNOWN — varies per battery, BMS accepts all values tested
 
  30   60–61     UNKNOWN — varies per battery, BMS accepts all values tested
-                Nybble 60: 0 on most good batteries, 4 on our corrupted battery
-                Charger confirmed: does NOT validate nybble 60
 
  31   62–63     Nybble 62 = AUX Checksum 0 (sum of nybbles 44–47 & 0x0F)
                 Nybble 63 = AUX Checksum 1 (sum of nybbles 48–61 & 0x0F)
@@ -231,12 +223,12 @@ checksum = (sum of nybbles in range) & 0x0F
 | Checksum | Location | Covers | Effect if wrong |
 |----------|----------|--------|-----------------|
 | CS0 | Nybble 41 | Nybbles 0–15 | Battery LOCKED |
-| CS1 | Nybble 42 | Nybbles 16–31 | Battery LOCKED |
+| CS1 | Nybble 42 | Nybbles 16–31 | No lock effect |
 | CS2 | Nybble 43 | Nybbles 32–40 | Battery LOCKED |
 | AUX0 | Nybble 62 | Nybbles 44–47 | No lock effect |
 | AUX1 | Nybble 63 | Nybbles 48–61 | No lock effect |
 
-**Always recalculate CS0 and CS2 after any frame change.** CS1 and AUX checksums are not charger-validated and are not required for charging.
+**Always recalculate all five checksums after any frame change.**
 
 After writing, the BMS goes bus-silent for ~3 seconds during flash commit, then wakes with committed data in place. First response = committed data. No intermediate state.
 
@@ -246,29 +238,25 @@ After writing, the BMS goes bus-silent for ~3 seconds during flash commit, then 
 
 **[CONFIRMED by systematic testing]**
 
-Any of the following will stop a battery from charging:
+The charger validates exactly **three things**:
 
 | Cause | Field | Notes |
 |-------|-------|-------|
+| Nybble 34 non-zero | Byte 17 low nybble must be `0` | The original Makita charger lock mechanism |
 | CS0 mismatch | Nybble 41 ≠ sum(nybbles 0–15) & 0x0F | |
-| CS1 mismatch | Nybble 42 ≠ sum(nybbles 16–31) & 0x0F | |
 | CS2 mismatch | Nybble 43 ≠ sum(nybbles 32–40) & 0x0F | |
-| Failure code | Nybble 40 ≠ 0 | |
-| Byte 1 wrong | Must be `0x26` (China) / `0x36` (Vietnam) | Confirmed by validation test |
-| Byte 17 wrong | Must be `0xD0` | Confirmed by validation test |
-| Byte 18 = 0x00 | Must not be zero | Battery will not charge |
-| Byte 19 = 0x00 | Must not be zero | Battery will not charge |
 
-AUX checksum mismatch (nybbles 62-63) does NOT stop charging.
+AUX checksums (nybbles 62-63) do NOT stop charging.
 
-**Fields confirmed NOT to stop charging:**
-- Byte 0 (any value accepted — not charger-validated, not modified during repair)
-- Nybble 6 changed to `4` — accepted
-- Nybble 27 changed to `9` — accepted
-- Bytes 2, 3, 4, 12 swapped to opposite variant — accepted
-- Status code (byte 19) non-zero values (`0xA5`, `0xFF`, `0x1B`) — all accepted
-- Byte 22 flags set — accepted
-- Unknown constants zeroed — accepted
+**Everything else is ignored by the charger**, confirmed by exhaustive testing of all 193 fields including:
+- Nybble 40 (FC=15) — accepted
+- Nybble 42 (CS1 wrong) — accepted
+- Byte 1 (`0x00`, `0xFF`, `0x36` Vietnam in China battery) — all accepted
+- Byte 18 (`0x00`, `0xFF`) — accepted
+- Byte 19 (`0x00`, `0xFF`, `0xA5`) — all accepted
+- All bytes 0–31 set to `0x00` and `0xFF` — all accepted except byte 17=0xFF (nybble 34≠0)
+
+**Theory confirmation:** A fully zeroed frame and two random garbage frames all charged with only nybble 34=0, CS0 and CS2 correct.
 
 Per Jansson: *"The earliest batteries were locked by the charger setting a certain nybble  
 to a non-zero value. This is still present in all newer batteries so the charger remains  
@@ -276,28 +264,7 @@ compatible."* That nybble is **nybble 34**.
 
 ---
 
-## 8. DA04 — What It Actually Does
-
-**DA04 is NOT an unlock command. It is an internal error register clear command.**
-
-### What DA04 does
-- Clears the BMS internal error register (separate from the stored frame)
-- On type 2 (older) batteries: also triggers BMS self-repair of stored frame
-- Response time: ~175ms consistently
-
-### What DA04 does NOT do
-- Change the stored frame (confirmed — frame byte-for-byte identical before and after)
-- Fix corrupted checksums on type 0/3 batteries (frame write required)
-- Unlock a battery on its own if stored frame has bad checksums
-
-### The BMS internal error register
-The BMS has internal state separate from flash. If the internal register still contains a failure code, the BMS will overwrite nybble 40 back to that failure code on subsequent power cycles — even after a successful frame write setting FC=0.
-
-**Symptom:** Battery shows UNLOCKED after frame write but comes back LOCKED after physical removal and reinsert. Checksums corrupt again with FC=3.
-
-**Fix:** DA04 after frame write clears the internal register. Battery then charges on first insert every time.
-
-### DA04 command sequence
+### 8 DA04 command sequence
 ```
 1. Enter test mode: CC D9 96 A5  →  response 1 byte
 2. Send DA04 via ROM: 33 [8 ROM bytes] DA 04  →  response 9 bytes
@@ -306,28 +273,28 @@ The BMS has internal state separate from flash. If the internal register still c
 5. Poll until battery responds (~175ms)
 ```
 
-### Type-specific DA04 behaviour
-| Type | DA04 result |
-|------|-------------|
-| Type 0 (modern) | Clears internal register only. Frame unchanged. |
-| Type 2 (older ~2013) | Self-repairs — BMS fixes own frame. Unlocks after DA04 alone. |
-| Type 3 | Clears internal register. Frame unchanged. |
-
 ---
 
 ## 9. Frame Write Safety
 
-### Minimum required for unlock
-- **Nybble 34 → zero** (preserve nybble 35 — mask `frame[17] & 0xF0`)
-- **CS0 (nybble 41) → recalculate**
-- **CS2 (nybble 43) → recalculate**
+### Safe to write
+- Nybble 34 → set to 0 (byte 17 = 0xD0)
+- Nybble 40 → set to `0` to unlock
+- Nybbles 41-43 → always recalculate
+- Nybbles 44-55 → health, OD, overload, cycle count
+- Nybbles 56-61 → unknown purpose but BMS accepts all tested values
+- Nybbles 62-63 → always recalculate
 
-That is all the charger checks. Everything else in the frame is irrelevant to charging.
+### Never overwrite with hardcoded values
+- Byte 0 → never touched during repair, no bearing on charging state
+- Bytes 1-2 (nybbles 2-5) → manufacturing variant
+- Byte 12 (nybbles 24-25) → manufacturing variant
+- Byte 19 (nybbles 38-39) → status code / variant identifier
 
-### Leave unchanged during repair
-- All data bytes — the charger does not read them, and the BMS owns them
-- Byte 22 — do not write high values, BMS went silent on 0xFF during testing
-- Bytes 8-9 — writing specific values caused issues after physical power cycle
+Always read these from the existing frame and preserve them exactly.
+
+### Potentially BMS-managed (write with caution)
+- Bytes 8-9 (nybbles 16-19) → writing specific values caused FC3 and checksum corruption after physical power cycle. Exact BMS behaviour not fully confirmed. Leave unchanged during repair.
 
 ---
 
@@ -336,7 +303,6 @@ That is all the charger checks. Everything else in the frame is irrelevant to ch
 - **Byte 0 = `0x50`** — completely different from `0xF1` new family
 - **No model string** — `read_model()` returns empty
 - **Health/cycle/OD/overload = 0** — old firmware never implemented these registers. Correct and expected, not corruption.
-- **DA04 self-repairs** — DA04 alone unlocks without frame write
 - **Damage rating** in nybble 46 applies to this family (not type 0/2/3/5/6 new family)
 - **Aux checksums = 0x21** — correctly populated despite other health fields being zero
 - **Type detection requires testmode** — probe enters testmode briefly then power cycles. Do NOT poll after this — let the chip settle.
@@ -345,7 +311,7 @@ That is all the charger checks. Everything else in the frame is irrelevant to ch
 
 ## 11. Confirmed Values by Model
 
-### Nybble 34 confirmed constant
+### Capacity class (nybble 34) — revised
 Byte 17 = `0xD0` is confirmed constant across all batteries tested.
 Nybble 34 = `0`, nybble 35 = `D` for all tested BL1830B, BL1850B, BL1860B.
 Safe repair target: **nybble 34 = 0** for all batteries.
@@ -363,9 +329,9 @@ Byte  6 = 0x00
 Byte  7 = 0x00
 Byte 10 = 0x40
 Byte 11 = 0x21
-Byte 13 = 0x80  (nybble 27=8 — NOT charger-validated — leave unchanged during repair)
+Byte 13 = 0x80
 Byte 14 = 0x02
-Byte 17 = 0xD0  (nybble 34=0 — charger-validated, nybble 35=D)
+Byte 17 = 0xD0
 Byte 18 = 0x8E
 ```
 
@@ -447,21 +413,9 @@ F1 26 BD 13 14 58 00 00 94 94 40
 6. Battery charges on first insert
 ```
 
-**Why byte 1 must be preserved:** The charger validates byte 1 independently.  
-Writing a China frame to a Vietnam battery (or vice versa) will cause charger rejection  
-even if all checksums are correct and nybble 34 = 0.
+The charger only checks nybble 34, CS0, and CS2. All other frame data is irrelevant to charging — the frame is written back with original data intact except for those fields.
 
 ---
 
-## 13. Outstanding Questions / Future Work
-
-- **Bytes 8-9 (nybbles 16-19):** Writing specific values caused issues after physical power cycle. Leave unchanged during repair.
-- **Byte 22 (nybble 44):** BMS went bus-silent when written to 0xFF. Avoid high values. Do not write to this byte during repair.
-- **BL1840B frames:** No confirmed healthy frames in dataset yet.
-- **Status `A5`:** Seen on dead-cell batteries of both variants. Confirmed not charger-validated — `0xA5` charged fine. Likely a BMS fault indicator only.
-- **Vietnam BL1830B/BL1860B:** No frames seen. Unknown if `36 B6` extends to these models.
-- **DA04 after frame write:** Confirmed necessary for reliable first-insert charging.
-
----
 
 *Compiled from OBI protocol documentation, hands-on testing of BL1815N/BL1830B/BL1840/BL1850B/BL1860B batteries, OBI clean frame source, Jansson protocol notes, and community frame data from 30+ batteries.*
