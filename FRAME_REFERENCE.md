@@ -220,7 +220,7 @@ Byte  Nybbles   Field
 Three primary checksums protect the frame:
 
 ```
-checksum = (sum of nybbles in range) & 0x0F
+checksum = min(sum(nybbles in range), 0xFF) & 0x0F
 ```
 
 | Checksum | Location | Covers | Effect if wrong |
@@ -246,8 +246,8 @@ The charger validates exactly **three things**:
 | Cause | Field | Notes |
 |-------|-------|-------|
 | Nybble 34 non-zero | Byte 17 low nybble must be `0` | The original Makita charger lock mechanism |
-| CS0 mismatch | Nybble 41 ≠ sum(nybbles 0–15) & 0x0F | |
-| CS2 mismatch | Nybble 43 ≠ sum(nybbles 32–40) & 0x0F | |
+| CS0 mismatch | Nybble 41 ≠ min(sum(nybbles 0–15), 0xFF) & 0x0F | |
+| CS2 mismatch | Nybble 43 ≠ min(sum(nybbles 32–40), 0xFF) & 0x0F | |
 
 AUX checksums (nybbles 62-63) do NOT stop charging.
 
