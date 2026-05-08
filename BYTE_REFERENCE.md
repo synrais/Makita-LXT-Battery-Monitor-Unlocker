@@ -275,7 +275,7 @@ Nybble 40 (low):  failure code
   0x1 = Overloaded
   0x5 = Warning
   0xF = Dead (FC_DEAD)
-Nybble 41 (high): Checksum CS0 = sum(nybbles 0–15) & 0x0F
+Nybble 41 (high): Checksum CS0 = min(sum(nybbles 0–15), 0xFF) & 0x0F
 
 Failure code min: 0x0 (OK)
 Failure code max: 0xF (dead)
@@ -289,8 +289,8 @@ Repair action: Recalculate CS0 (nybble 41) after any frame change — **charger-
 
 ### Byte 21 — CS1 + CS2
 ```
-Nybble 42 (low):  Checksum CS1 = sum(nybbles 16–31) & 0x0F
-Nybble 43 (high): Checksum CS2 = sum(nybbles 32–40) & 0x0F
+Nybble 42 (low):  Checksum CS1 = min(sum(nybbles 16–31), 0xFF) & 0x0F
+Nybble 43 (high): Checksum CS2 = min(sum(nybbles 32–40), 0xFF) & 0x0F
 ```
 Type: Variable  
 Bad CS2 (nybble 43) **Will stop charging** — charger-validated.  
@@ -419,8 +419,8 @@ Repair action: Leave unchanged
 ### Byte 31 — AUX Checksums
 ```
 Values seen: 0x0B – 0xF5  (derived from data)
-Nybble 62 (low):  AUX Checksum 0 = sum(nybbles 44–47) & 0x0F
-Nybble 63 (high): AUX Checksum 1 = sum(nybbles 48–61) & 0x0F
+Nybble 62 (low):  AUX Checksum 0 = min(sum(nybbles 44–47), 0xFF) & 0x0F
+Nybble 63 (high): AUX Checksum 1 = min(sum(nybbles 48–61), 0xFF) & 0x0F
 ```
 Type: Variable  
 AUX checksums do NOT affect lock state — mismatch does not lock the battery.  
@@ -476,8 +476,8 @@ The charger validates exactly **three things**. Everything else is ignored.
 | Field | Required value | Effect if wrong |
 |-------|---------------|-----------------|
 | Nybble 34 (byte 17 low) | `0x0` | Battery LOCKED |
-| Nybble 41 / CS0 | sum(nybbles 0–15) & 0x0F | Battery LOCKED |
-| Nybble 43 / CS2 | sum(nybbles 32–40) & 0x0F | Battery LOCKED |
+| Nybble 41 / CS0 | min(sum(nybbles 0–15), 0xFF) & 0x0F | Battery LOCKED |
+| Nybble 43 / CS2 | min(sum(nybbles 32–40), 0xFF) & 0x0F | Battery LOCKED |
 
 **Theory confirmation:** A fully zeroed 32-byte frame (all `0x00`) with only these three  
 conditions met charged successfully. Two random garbage frames with the same three  
