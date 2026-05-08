@@ -5,7 +5,7 @@ Each field was set to its minimum (0x00 / 0x0) and maximum (0xFF / 0xF) value, w
 fields correct. The battery was then inserted into a charger to determine whether it accepted or rejected.
 
 **Battery used:** BL1860B China/Murata (new family, type 0)  
-**Total tests:** 193
+**Total tests:** 200+
 
 ---
 
