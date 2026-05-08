@@ -398,7 +398,7 @@ AUX checksums do NOT affect lock state — mismatch does not lock the battery.
 | 8 | variable | Unknown / BMS state | Leave unchanged |
 | 9 | variable | Unknown / BMS state (= byte 8) | Leave unchanged |
 | 10 | `0x40` | Universal constant | Leave unchanged |
-| 11 | `0x21` | Universal constant | Leave unchanged |
+| 11 | variable | Variant constant | Leave unchanged |
 | 12 | variable | Variant constant | Leave unchanged |
 | 13 | `0x80` | Universal constant | Leave unchanged |
 | 14 | `0x02` | Universal constant | Leave unchanged |
