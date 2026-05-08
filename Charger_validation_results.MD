@@ -2,7 +2,7 @@
 
 Exhaustive field-by-field test of every byte and nybble in the 32-byte BMS frame.  
 Each field was set to its minimum (0x00 / 0x0) and maximum (0xFF / 0xF) value, with all other  
-fields correct. The battery was then inserted into a charger to determine whether it accepted or rejected.
+fields correct, CRC corrected when required. The battery was then inserted into a charger to determine whether it accepted or rejected.
 
 **Battery used:** BL1860B China/Murata (type 0)  
 **Total tests:** 200+
