@@ -137,19 +137,19 @@ Available on most battery types. This is the BMS's own internal coarse estimate,
 
 If a battery is locked, the monitor performs an unlock sequence automatically. It stops as soon as a pass declares success.
 
-### Step 1 — Error reset (yellow)
-The monitor power-cycles the bus, enters test mode, and sends the standard `DA 04` error-reset command. This tells the BMS to clear its internal error register and attempt its own self-repair. The bus is then re-read and all lock causes are checked. This handles the most common real-world lock conditions — overdischarge, overload, naturally triggered failure codes. A single pass is usually enough for naturally locked batteries on all battery types.
+### Attempt 1 — Error reset (yellow)
+The monitor power-cycles the bus, enters test mode, and sends the standard `DA 04` error-reset command. This tells the BMS to clear its internal error register and attempt its own self-repair. The bus is then re-read and all lock causes are checked. This handles the most common real-world lock conditions — overdischarge, overload, naturally triggered failure codes. If the battery unlocks, the sequence stops here.
 
-### Step 2 — Frame repair (purple)
-If the battery is still locked after DA04, the monitor performs a frame repair. Based on exhaustive testing of every field in the frame, the charger validates exactly three things:
+### Attempts 1–6 — Frame repair (purple)
+If still locked after the DA04, frame repair runs immediately as part of the same attempt — and continues for up to 6 attempts total if needed. Based on exhaustive testing of every field in the frame, the charger validates exactly three things:
 
 - **Nybble 34** — charger lock nybble, must be 0
 - **CS0** — checksum of nybbles 0–15, must be correct
 - **CS2** — checksum of nybbles 32–40, must be correct
 
-The repair zeros nybble 34 and recalculates CS0 and CS2 — the only two checksums the charger validates. All other frame data — cycle count, OD counter, overload counter, capacity, health history, variant bytes, status code, CS1, AUX checksums — is left completely untouched. After a successful frame write, a DA04 is sent automatically to clear the internal error register so the battery charges on first charger insert.
+The repair zeros nybble 34 and recalculates CS0 and CS2. All other frame data — cycle count, OD counter, overload counter, capacity, health history, variant bytes, status code, CS1, AUX checksums — is left completely untouched.
 
-Frame repair is attempted up to six times. In practice almost all batteries unlock on the first or second attempt. If all attempts are exhausted without success the LED turns red.
+In practice almost all batteries unlock on the first attempt. If all attempts are exhausted without success the LED turns red.
 
 ---
 
