@@ -202,6 +202,7 @@ This is the standard 1-Wire pull-up value — lower values overdrive the bus and
 - **ESP32-C3 / RP2040 Zero** — pull up 4.7 kΩ to **3.3v only**. These are 3.3v-native devices and 5v on a GPIO will damage them.
 
 > **Optional** — A 1 kΩ load resistor may be required across the battery's main power terminals (B+ to B−), as some batteries enter a deep sleep state and will not respond on the 1-Wire bus until they detect current draw on the power terminals. Plugging into a Makita charger or 2 pin device will also wake a battery from this state.
+
 > Also as precaution connect the Bus enable and 1-Wire of your battery to your chip via 120 Ω resistors to mitigate risk of a pin getting stuck high or low or blowing (It helps alot!). Make sure they are directly connected to the GPIO pins and your battery Bus enable and 1-Wire pins!
 
 > **Note** — A battery will accept charge from any DC power source in any state (deep sleep or error). Loading the battery with a 1 kΩ resistor then briefly grounding the enable pin should make any locked BMS wake up and output power without clearing errors, provided the battery is above ~8v.
