@@ -19,7 +19,7 @@ Insert any Makita 18v or 36v LXT Li-Ion pack and within 2 seconds you get a full
 - 🛠️ **Auto-unlock** — performs a charger-style unlock sequence automatically on locked packs
 - 🔧 **Frame repair** — comprehensively repairs corrupt frame fields whilst preserving all salvageable data
 - 🔐 **Omega lock** — sets the original Makita charger lock (nybble 34) if GPIO2→GPIO3 bridged — Recoverable
-  
+
 No configuration. No button presses. Just insert the battery and it runs. Remove it and the device waits for the next one.
 
 > Remember to have the PC/Phone plugged in and ready before inserting a battery if you want to see the results of the first scan!
@@ -49,7 +49,7 @@ Lift the PCB at each tab to verify it is firmly connected, if not repair with so
 | 🔴 Red      | Unlock failed or BMS dead                                      |
 | 🟠 Orange   | **Blink**, Major cell imbalance or broken balancer tab         |
 
-## Lock Mode (GPI20→GPIO3 = Omega Lock) - Recoverable
+## Lock Mode (GPIO2→GPIO3 = Omega Lock) - Recoverable
 | Colour      | Meaning                                                        |
 |-------------|----------------------------------------------------------------|
 | 🔴 Red      | **Pulse**, No battery / idle                                   |
@@ -75,16 +75,18 @@ All three can trigger a scan, and colourise the output (lock state, health, erro
 
 # Supported Battery Types
 
-| Type | MCU | Voltages | Temperature | Health | Counters | Charge Level | Unlock |
+| Type | MCU | Voltages | Temperature | Health | Counters | Extended Stats | Unlock |
 |------|-----|----------|-------------|--------|----------|--------------|--------|
 | 0 — Standard (newest) | STM32L051 (confirmed) / RAJ240 (inferred) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| 2 | Unknown — inferred from BTC04 traces | ✅ | ✅ | ✅ | ✅ | —  | ✅ |
-| 3 | Unknown — inferred from BTC04 traces | ✅ | ✅ | ✅ | ✅ | —  | ✅ |
+| 2 | Unknown — inferred from BTC04 traces | ✅ | ✅ | ✅ | ✅ | — | ✅ |
+| 3 | Unknown — inferred from BTC04 traces | ✅ | ✅ | ✅ | ✅ | — | ✅ |
 | 5 — F0513 based | NEC/Renesas F0513 | ✅ | ✅ | ✅ | ✅ | ✅ | — |
 | 6 — 10 cell | Renesas RL78 | ✅ | ✅ | ✅ | — | — | — |
 | Unknown / Old | Freescale MC908JK3E | — | — | ✅ | — | — | — |
 
-Types 5 and 6 have their own dedicated voltage and temperature commands and are fully read-out, but have no documented test mode, unlock, or counter commands.
+> **Type 5 (F0513)** — unlock is not supported. The F0513 flash write sequence carries a high risk of permanently bricking the pack. Type 5 batteries are read-only.
+
+> **Extended Stats** — Type 0 batteries expose a full SRAM stats block via the D7 command, providing SOC %, remaining charge, live current draw, learned and best capacity, cell and mosfet temperatures, error status, error counters, and SOC recalibration timing.
 
 ---
 
@@ -119,17 +121,20 @@ A large cell voltage spread almost always indicates a **broken balancing tab** �
 | Code | Meaning                          |
 |------|----------------------------------|
 | 0    | OK — no fault                    |
-| 1    | Overloaded                       |
+| 1    | Overcurrent / overload           |
+| 3    | Charging fault (fuse blown, mosfet shorted, or cell overvoltage at 4.37V) |
+| 4    | Fault (sub-cause not yet mapped) |
 | 5    | Warning                          |
+| 7    | NTC temp diff >50°C, EEPROM error, cell overvoltage at 4.22V, or cell imbalance >300mV at idle |
 | 15   | Critical — BMS dead (unlock sequence still attempted) |
 
 ### ⚡ Cell Imbalance
 
 The `Cell diff` value is the spread between your highest and lowest cell voltage. Anything above **~0.050v** is worth watching — it indicates the cells are drifting and may need balancing.
 
-### 🔌 State of Charge (0–7 scale)
+### 🔌 State of Charge (Type 0)
 
-Available on most battery types. This is the BMS's own internal coarse estimate, not a precision fuel gauge — treat it as a rough indicator.
+Type 0 batteries report a live SOC % directly from the BMS, along with remaining charge in Ah calculated from the battery's own learned capacity reference. This is a precision fuel gauge — not a coarse estimate.
 
 ---
 
@@ -167,7 +172,7 @@ Lock is attempted up to six times. After each write the frame is read back to co
 
 ## Manual Rescan
 
-Hit `Enter` (or send `S`) over the serial monitor at any time to trigger a fresh scan of the currently inserted battery. Handy after a tool draw-down or thermal event to check updated state.
+Hit `s` over the serial monitor at any time to trigger a fresh scan of the currently inserted battery. Handy after a tool draw-down or thermal event to check updated state.
 
 ---
 ---
