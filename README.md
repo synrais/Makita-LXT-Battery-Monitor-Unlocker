@@ -75,7 +75,7 @@ All three can trigger a scan, and colourise the output (lock state, health, erro
 
 # Supported Battery Types
 
-| Type | MCU | Voltages | Temperature | Health | Counters | Extended Stats | Unlock |
+| Type | MCU | Voltages | Temperature | Health | Counters | Extended Stats | Unlock/lock |
 |------|-----|----------|-------------|--------|----------|--------------|--------|
 | 0 — Standard (newest) | STM32L051 (confirmed) / RAJ240 (inferred) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | 2 | Unknown — inferred from BTC04 traces | ✅ | ✅ | ✅ | ✅ | — | ✅ |
@@ -84,7 +84,7 @@ All three can trigger a scan, and colourise the output (lock state, health, erro
 | 6 — 10 cell | Renesas RL78 | ✅ | ✅ | ✅ | — | — | — |
 | Unknown / Old | Freescale MC908JK3E | — | — | ✅ | — | — | — |
 
-> **Type 5 (F0513)** — unlock is not supported. The F0513 flash write sequence carries a high risk of permanently bricking the pack. Type 5 batteries are read-only.
+> **Type 5 (F0513)** — unlock/lock is not supported. The F0513 flash write sequence carries a high risk of permanently bricking the pack. Type 5 batteries are read-only.
 
 > **Extended Stats** — Type 0 batteries expose a full SRAM stats block via the D7 command, providing SOC %, remaining charge, live current draw, learned and best capacity, cell and mosfet temperatures, error status, error counters, and SOC recalibration timing.
 
