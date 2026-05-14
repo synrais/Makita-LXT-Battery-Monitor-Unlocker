@@ -957,8 +957,8 @@ static void print_report(const BatteryInfo &info, const VoltageReadResult &vr,
     Serial.println(')');
     Serial.print(F("Rated capacity : ")); Serial.print(info.capacity_ah,1); Serial.println(F(" Ah"));
     if (d7.valid) {
-        Serial.print(F("Real capacity  : ")); Serial.print(d7.rem1/1000.0f,3); Serial.println(F(" Ah"));
-        Serial.print(F("Trim capacity  : ")); Serial.print(d7.rem2/1000.0f,3); Serial.println(F(" Ah"));
+        Serial.print(F("Learned cap    : ")); Serial.print(d7.rem1/1000.0f,3); Serial.println(F(" Ah"));
+        Serial.print(F("Best capacity  : ")); Serial.print(d7.rem2/1000.0f,3); Serial.println(F(" Ah"));
     }
 
     print_sep();
