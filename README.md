@@ -126,7 +126,7 @@ A large cell voltage spread almost always indicates a **broken balancing tab** �
 | 4    | Fault (sub-cause not yet mapped) |
 | 5    | Warning                          |
 | 7    | NTC temp diff >50°C, EEPROM error, cell overvoltage at 4.22V, or cell imbalance >300mV at idle |
-| 15   | Real capacity under 70% of Target capacity"|
+| 15   | Real capacity under 70% of Rated capacity"|
 
 ### ⚡ Cell Imbalance
 
